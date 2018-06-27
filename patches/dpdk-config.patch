@@ -1,0 +1,313 @@
+Add command-line parameters for DPDK configuration.
+
+From: Aaron Jones <aaron@vexing.codes>
+
+Adds the following command-line arguments to RAMCloud to allow more control
+over how DPDK is configured, and how DPDK traffic is tagged on the network.
+
+  --dpdkArgs     - Specify the paramters to rte_eal_init. If blank then
+                   RAMCloud's default will be used.
+  --dpdkVlanTag  - Specify the VLAN tag that should be used for all RAMCloud
+                   traffic over DPDK.
+  --dpdkSkipInit - Specify whether or not rte_eal_init should be called.
+                   RAMCloud client programs may want to call this function
+                   themselves to customize the configuration. If this is
+                   specified then --dpdkArgs is silently ignored.
+
+Updates DPDK initialization in src/DpdkDriver.cc to allow the RAMCloud process
+to run sockets that are not socket zero.
+---
+ src/DpdkDriver.cc       |  104 +++++++++++++++++++++++++++++++++--------------
+ src/DpdkDriver.h        |    9 ++++
+ src/OptionParser.cc     |   15 +++++++
+ src/OptionParser.h      |   33 +++++++++++++++
+ src/TransportManager.cc |    6 ++-
+ 5 files changed, 133 insertions(+), 34 deletions(-)
+
+diff --git a/src/DpdkDriver.cc b/src/DpdkDriver.cc
+index 7f6bc040..012136aa 100644
+--- a/src/DpdkDriver.cc
++++ b/src/DpdkDriver.cc
+@@ -97,6 +97,7 @@ DpdkDriver::DpdkDriver()
+     , bandwidthMbps(10000)
+     , highestPriorityAvail(7)
+     , lowestPriorityAvail(0)
++    , vlanTag(0)
+     , fileLogger(NOTICE, "DPDK: ")
+ {
+     localMac.construct("01:23:45:67:89:ab");
+@@ -121,7 +122,11 @@ DpdkDriver::DpdkDriver()
+  *      Selects which physical port to use for communication.
+  */
+ 
+-DpdkDriver::DpdkDriver(Context* context, int port)
++DpdkDriver::DpdkDriver(Context* context,
++                       int port,
++                       std::string args,
++                       bool skipInit,
++                       uint16_t tag)
+     : context(context)
+     , packetBufPool()
+     , packetBufsUtilized(0)
+@@ -136,6 +141,7 @@ DpdkDriver::DpdkDriver(Context* context, int port)
+     // Assume we are allowed to use all 8 ethernet priorities.
+     , highestPriorityAvail(7)
+     , lowestPriorityAvail(0)
++    , vlanTag(tag)
+     , fileLogger(NOTICE, "DPDK: ")
+ {
+     struct ether_addr mac;
+@@ -143,6 +149,12 @@ DpdkDriver::DpdkDriver(Context* context, int port)
+     struct rte_eth_conf portConf;
+     int ret;
+ 
++    if (vlanTag >= 4095) {
++        throw DriverException(HERE,
++                              "Bad vlan tag, expected vlanTag < 4095, got %i",
++                              static_cast<int>(vlanTag));
++    }
++
+     portId = downCast<uint8_t>(port);
+ 
+     // Initialize the DPDK environment with some default parameters.
+@@ -151,34 +163,43 @@ DpdkDriver::DpdkDriver(Context* context, int port)
+     // This is a bug in DPDK as of 9/2016; if the bug gets fixed, then
+     // the --file-prefix argument can be removed.
+     LOG(NOTICE, "Using DPDK version %s", rte_version());
+-    char nameBuffer[1000];
+-    if (gethostname(nameBuffer, sizeof(nameBuffer)) != 0) {
+-        throw DriverException(HERE, format("gethostname failed: %s",
+-                strerror(errno)));
+-    }
+-    nameBuffer[sizeof(nameBuffer)-1] = 0;   // Needed if name was too long.
+-    const char *argv[] = {"rc", "--file-prefix", nameBuffer, "-c", "1",
+-            "-n", "1", NULL};
+-    int argc = static_cast<int>(sizeof(argv) / sizeof(argv[0])) - 1;
+-
+-    rte_openlog_stream(fileLogger.getFile());
+-    ret = rte_eal_init(argc, const_cast<char**>(argv));
+-    if (ret < 0) {
+-        throw DriverException(HERE, "rte_eal_init failed");
+-    }
+-
+-    // create an memory pool for accommodating packet buffers
+-    mbufPool = rte_mempool_create("mbuf_pool", NB_MBUF,
+-            MBUF_SIZE, 32,
+-            sizeof32(struct rte_pktmbuf_pool_private),
+-            rte_pktmbuf_pool_init, NULL,
+-            rte_pktmbuf_init, NULL,
+-            rte_socket_id(), 0);
+-
+-    if (!mbufPool) {
+-        throw DriverException(HERE, format(
+-                "Failed to allocate memory for packet buffers: %s",
+-                rte_strerror(rte_errno)));
++    if (!skipInit)
++    {
++        auto dpdkInit = [&](int argc, char** argv) {
++            for (int i = 0; i < argc; ++i)
++                LOG(NOTICE, "DPDK command-line %i = %s", i, argv[i]);
++            rte_openlog_stream(fileLogger.getFile());
++            ret = rte_eal_init(argc, argv);
++            if (ret < 0) {
++                throw DriverException(HERE, "rte_eal_init failed");
++            }
++        };
++
++        if (args.empty()) {
++            // Initialize the DPDK environment with some default parameters.
++            // --file-prefix is needed to avoid false lock conflicts if servers
++            // run on different nodes, but with a shared NFS home directory.
++            // This is a bug in DPDK as of 9/2016; if the bug gets fixed, then
++            // the --file-prefix argument can be removed.
++            char nameBuffer[1000];
++            if (gethostname(nameBuffer, sizeof(nameBuffer)) != 0) {
++                throw DriverException(HERE, format("gethostname failed: %s",
++                        strerror(errno)));
++            }
++            nameBuffer[sizeof(nameBuffer)-1] = 0;   // Needed if name was too long.
++            const char *argv[] = {"rc", "--file-prefix", nameBuffer, "-c", "1",
++                    "-n", "1", NULL};
++            int argc = static_cast<int>(sizeof(argv) / sizeof(argv[0])) - 1;
++            dpdkInit(argc, const_cast<char**>(argv));
++        } else {
++            std::replace(args.begin(), args.end(), ' ', '\0');
++            int argc = static_cast<int>(std::count(args.begin(), args.end(), '\0') + 1);
++            char* cstr = const_cast<char*>(args.c_str());
++            char* argv[argc];
++            for (int i = 0, pos = 0; i < argc; ++i, pos = args.find_first_of('\0', pos) + 1)
++                argv[i] = cstr + pos;
++            dpdkInit(argc, argv);
++        }
+     }
+ 
+     // ensure that DPDK was able to detect a compatible and available NIC
+@@ -217,10 +238,29 @@ DpdkDriver::DpdkDriver(Context* context, int port)
+           }
+     }
+ 
++    int dpdk_socket = rte_eth_dev_socket_id(portId);
++    if (dpdk_socket < 0) {
++        throw DriverException(HERE, format("Unable to get socket for ethernet device."));
++    }
++
++    // create an memory pool for accommodating packet buffers
++    mbufPool = rte_mempool_create("mbuf_pool", NB_MBUF,
++            MBUF_SIZE, 32,
++            sizeof32(struct rte_pktmbuf_pool_private),
++            rte_pktmbuf_pool_init, NULL,
++            rte_pktmbuf_init, NULL,
++            dpdk_socket, 0);
++
++    if (!mbufPool) {
++        throw DriverException(HERE, format(
++                "Failed to allocate memory for packet buffers: %s",
++                rte_strerror(rte_errno)));
++    }
++
+     // setup and initialize the receive and transmit NIC queues,
+     // and activate the port.
+-    rte_eth_rx_queue_setup(portId, 0, NDESC, 0, NULL, mbufPool);
+-    rte_eth_tx_queue_setup(portId, 0, NDESC, 0, NULL);
++    rte_eth_rx_queue_setup(portId, 0, NDESC, dpdk_socket, NULL, mbufPool);
++    rte_eth_tx_queue_setup(portId, 0, NDESC, dpdk_socket, NULL);
+ 
+     // set the MTU that the NIC port should support
+     ret = rte_eth_dev_set_mtu(portId, MAX_PAYLOAD_SIZE);
+@@ -528,7 +568,7 @@ DpdkDriver::sendPacket(const Address* addr,
+     // Fill out the PCP field and the Ethernet frame type of the encapsulated
+     // frame (DEI and VLAN ID are not relevant and trivially set to 0).
+     struct vlan_hdr* vlanHdr = reinterpret_cast<struct vlan_hdr*>(p);
+-    vlanHdr->vlan_tci = rte_cpu_to_be_16(PRIORITY_TO_PCP[priority]);
++    vlanHdr->vlan_tci = rte_cpu_to_be_16(PRIORITY_TO_PCP[priority] | vlanTag);
+     vlanHdr->eth_proto = rte_cpu_to_be_16(NetUtil::EthPayloadType::RAMCLOUD);
+     p += VLAN_TAG_LEN;
+ 
+diff --git a/src/DpdkDriver.h b/src/DpdkDriver.h
+index ba6d2314..4b5935ca 100644
+--- a/src/DpdkDriver.h
++++ b/src/DpdkDriver.h
+@@ -57,7 +57,11 @@ class DpdkDriver : public Driver
+ #if TESTING
+     explicit DpdkDriver();
+ #endif
+-    explicit DpdkDriver(Context* context, int port = 0);
++    explicit DpdkDriver(Context* context,
++                        int port = 0,
++                        std::string args = "",
++                        bool skipInit = false,
++                        uint16_t tag = 0);
+     virtual ~DpdkDriver();
+     virtual int getHighestPacketPriority();
+     virtual uint32_t getMaxPacketSize();
+@@ -176,6 +180,9 @@ class DpdkDriver : public Driver
+     /// be `highestPriorityAvail - lowestPriorityAvail + 1`.
+     int lowestPriorityAvail;
+ 
++    /// The VLAN tag to put into outgoing packets.
++    uint16_t vlanTag;
++
+     /// Used to redirect log entries from the DPDK log into the RAMCloud log.
+     FileLogger fileLogger;
+ 
+diff --git a/src/OptionParser.cc b/src/OptionParser.cc
+index 1945cc64..7876a725 100644
+--- a/src/OptionParser.cc
++++ b/src/OptionParser.cc
+@@ -234,6 +234,21 @@ OptionParser::setup(int argc, char* argv[])
+                 default_value(-1),
+              "Selects the Ethernet port that the DPDK driver should use, "
+              "or -1 if DPDK should not be enabled.")
++            ("dpdkArgs",
++             ProgramOptions::value<std::string>(&options.dpdkArgs)->
++                default_value(""),
++             "The arguments to give to rte_eal_init to initialize DPDK. If"
++             " empty then the arguments will be generated.")
++            ("dpdkSkipInit",
++             ProgramOptions::value<bool>(&options.dpdkSkipInit)->
++                default_value(false),
++             "Whether or not to skip rte_eal_init because it has already been"
++             " called. Default is false, which means rte_eal_init will be"
++             " called.")
++            ("dpdkVlanTag",
++             ProgramOptions::value<uint16_t>(&options.dpdkVlanTag)->
++                default_value(0),
++             "The VLAN tag to include in outgoing DPDK packets.")
+             ("portTimeout",
+              ProgramOptions::value<int32_t>(&options.portTimeout)->
+                 default_value(-1), // Overriding to the initial value.
+diff --git a/src/OptionParser.h b/src/OptionParser.h
+index d57a3f16..c9ef9759 100644
+--- a/src/OptionParser.h
++++ b/src/OptionParser.h
+@@ -46,6 +46,9 @@ class CommandLineOptions {
+         , portTimeout(0)
+         , clusterName()
+         , dpdkPort(0)
++        , dpdkArgs("")
++        , dpdkSkipInit(false)
++        , dpdkVlanTag(0)
+     {
+     }
+ 
+@@ -118,6 +121,33 @@ class CommandLineOptions {
+         return dpdkPort;
+     }
+ 
++    /**
++     * Returns the arguments to give to rte_eal_init to initialize DPDK. If
++     * blank, one will be generated.
++     */
++    std::string getDpdkArgs() const
++    {
++        return dpdkArgs;
++    }
++
++    /**
++     * Returns whether or not rte_eal_init should be skipped when initializing
++     * DPDK. This can be done because DPDK has already been initialized by an
++     * application instantiating a RAMCloud::RAMCloud.
++     */
++    bool getDpdkSkipInit() const
++    {
++        return dpdkSkipInit;
++    }
++
++    /**
++     * Gets the VLAN tag that should be used in packets outgoing from RAMCloud.
++     */
++    uint16_t getDpdkVlanTag() const
++    {
++        return dpdkVlanTag;
++    }
++
+     string coordinatorLocator;      ///< See getCoordinatorLocator().
+     string localLocator;            ///< See getLocalLocator().
+     string externalStorageLocator;  ///< See getExternalStorageLocator().
+@@ -126,6 +156,9 @@ class CommandLineOptions {
+     int32_t  portTimeout;           ///< See getSessionTimeout().
+     string clusterName;             ///< See getClusterName().
+     int dpdkPort;                   ///< See getDpdkPort().
++    std::string dpdkArgs;           ///< See getDpdkArgs().
++    bool dpdkSkipInit;              ///< See getDpdkSkipInit().
++    uint16_t dpdkVlanTag;           ///< See getDpdkVlanTag().
+ };
+ 
+ /**
+diff --git a/src/TransportManager.cc b/src/TransportManager.cc
+index 59425165..ede7e501 100644
+--- a/src/TransportManager.cc
++++ b/src/TransportManager.cc
+@@ -157,7 +157,11 @@ TransportManager::TransportManager(Context* context)
+     if (context->options != NULL) {
+         int dpdkPort = context->options->getDpdkPort();
+         if (dpdkPort >= 0) {
+-            dpdkDriver = new DpdkDriver(context, dpdkPort);
++            dpdkDriver = new DpdkDriver(context,
++                                        dpdkPort,
++                                        context->options->getDpdkArgs(),
++                                        context->options->getDpdkSkipInit(),
++                                        context->options->getDpdkVlanTag());
+             basicDpdkTransportFactory.setDpdkDriver(dpdkDriver);
+         }
+     }

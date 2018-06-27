@@ -1,0 +1,24 @@
+Fix pointer aritmetic error in DpdkDriver.cc
+
+From: Aaron Jones <aaron@vexing.codes>
+
+The payload_to_mbuf macro in DpdkDriver.cc is off by four because it fails to
+account for the VLAN tag in the ethernet header. The error results in undefined
+behvior when freeing DPDK buffers.
+---
+ src/DpdkDriver.cc |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/DpdkDriver.cc b/src/DpdkDriver.cc
+index 7f6bc040..a8ee1c52 100644
+--- a/src/DpdkDriver.cc
++++ b/src/DpdkDriver.cc
+@@ -75,7 +75,7 @@ namespace {
+ // Short-hand to obtain the starting address of a DPDK rte_mbuf based on its
+ // payload address.
+ #define payload_to_mbuf(payload) reinterpret_cast<struct rte_mbuf*>( \
+-    payload - ETHER_HDR_LEN - RTE_PKTMBUF_HEADROOM - sizeof(struct rte_mbuf))
++    payload - ETHER_VLAN_HDR_LEN - RTE_PKTMBUF_HEADROOM - sizeof(struct rte_mbuf))
+ 
+ constexpr uint16_t DpdkDriver::PRIORITY_TO_PCP[8];
+

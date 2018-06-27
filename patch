@@ -1,0 +1,9 @@
+#!/bin/bash -e
+git clone https://github.com/PlatformLab/RAMCloud.git
+cd RAMCloud
+[[ -n $(git config user.name) ]] || git config user.name "nobody"
+[[ -n $(git config user.email) ]] || git config user.email "nobody@nowhere"
+git checkout -b stg_patched $(cat ../patches/series | head -1 | awk '{print $NF}')
+git submodule update --init --recursive
+stg init
+stg import --series ../patches/series
