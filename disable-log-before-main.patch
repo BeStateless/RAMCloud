@@ -1,0 +1,33 @@
+don't spawn new threads before main
+
+From: Aaron Jones <aaron@vexing.codes>
+
+The function haveSse42 is called at static initialization time. When LOG is
+called it will call RAMCloud::Logger::get which will instantiate a static
+RAMCloud::Logger instance which spawns a thread
+(RAMCloud::Logger::printThreadMain). This thread is spawned before we have a
+chance to block signals in it, so the logging thread will intercept signals we
+want to handle with our own signal handling thread in
+stateless::kernel::signal_handler. To avoid printThreadMain starting before main
+we comment out the lines in haveSse42 that invoke LOG.
+---
+ src/Crc32C.cc |    2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/src/Crc32C.cc b/src/Crc32C.cc
+index 4bfb47a2..0f3ef486 100644
+--- a/src/Crc32C.cc
++++ b/src/Crc32C.cc
+@@ -30,10 +30,12 @@ haveSse42() {
+     uint32_t a, b, c, d;
+     CPUID(1, a, b, c, d);
+     bool ret = ((c & (1 << 20)) != 0);
++#if 0
+     if (ret)
+         LOG(DEBUG, "Processor has SSE 4.2");
+     else
+         LOG(DEBUG, "Processor does not have SSE 4.2");
++#endif
+     return ret;
+ }
+ } // anonymous namespace
