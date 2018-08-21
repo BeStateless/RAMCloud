@@ -1,0 +1,246 @@
+Add command-line parameters for DPDK configuration.
+
+From: Aaron Jones <aaron@vexing.codes>
+
+Adds the following command-line arguments to RAMCloud to allow more control
+over how DPDK is configured.
+
+  --dpdkArgs     - Specify the paramters to rte_eal_init. If blank then
+                   RAMCloud's default will be used.
+  --dpdkSkipInit - Specify whether or not rte_eal_init should be called.
+                   RAMCloud client programs may want to call this function
+                   themselves to customize the configuration. If this is
+                   specified then --dpdkArgs is silently ignored.
+
+Updates DPDK initialization in src/DpdkDriver.cc to allow the RAMCloud process
+to run sockets that are not socket zero.
+---
+ src/DpdkDriver.cc       |   93 +++++++++++++++++++++++++++++++----------------
+ src/DpdkDriver.h        |    5 ++-
+ src/OptionParser.cc     |   11 ++++++
+ src/OptionParser.h      |   23 ++++++++++++
+ src/TransportManager.cc |    5 ++-
+ 5 files changed, 104 insertions(+), 33 deletions(-)
+
+diff --git a/src/DpdkDriver.cc b/src/DpdkDriver.cc
+index 7f6bc040..52795e5e 100644
+--- a/src/DpdkDriver.cc
++++ b/src/DpdkDriver.cc
+@@ -121,7 +121,10 @@ DpdkDriver::DpdkDriver()
+  *      Selects which physical port to use for communication.
+  */
+ 
+-DpdkDriver::DpdkDriver(Context* context, int port)
++DpdkDriver::DpdkDriver(Context* context,
++                       int port,
++                       std::string args,
++                       bool skipInit)
+     : context(context)
+     , packetBufPool()
+     , packetBufsUtilized(0)
+@@ -151,34 +154,43 @@ DpdkDriver::DpdkDriver(Context* context, int port)
+     // This is a bug in DPDK as of 9/2016; if the bug gets fixed, then
+     // the --file-prefix argument can be removed.
+     LOG(NOTICE, "Using DPDK version %s", rte_version());
+-    char nameBuffer[1000];
+-    if (gethostname(nameBuffer, sizeof(nameBuffer)) != 0) {
+-        throw DriverException(HERE, format("gethostname failed: %s",
+-                strerror(errno)));
+-    }
+-    nameBuffer[sizeof(nameBuffer)-1] = 0;   // Needed if name was too long.
+-    const char *argv[] = {"rc", "--file-prefix", nameBuffer, "-c", "1",
+-            "-n", "1", NULL};
+-    int argc = static_cast<int>(sizeof(argv) / sizeof(argv[0])) - 1;
+-
+-    rte_openlog_stream(fileLogger.getFile());
+-    ret = rte_eal_init(argc, const_cast<char**>(argv));
+-    if (ret < 0) {
+-        throw DriverException(HERE, "rte_eal_init failed");
+-    }
+-
+-    // create an memory pool for accommodating packet buffers
+-    mbufPool = rte_mempool_create("mbuf_pool", NB_MBUF,
+-            MBUF_SIZE, 32,
+-            sizeof32(struct rte_pktmbuf_pool_private),
+-            rte_pktmbuf_pool_init, NULL,
+-            rte_pktmbuf_init, NULL,
+-            rte_socket_id(), 0);
+-
+-    if (!mbufPool) {
+-        throw DriverException(HERE, format(
+-                "Failed to allocate memory for packet buffers: %s",
+-                rte_strerror(rte_errno)));
++    if (!skipInit)
++    {
++        auto dpdkInit = [&](int argc, char** argv) {
++            for (int i = 0; i < argc; ++i)
++                LOG(NOTICE, "DPDK command-line %i = %s", i, argv[i]);
++            rte_openlog_stream(fileLogger.getFile());
++            ret = rte_eal_init(argc, argv);
++            if (ret < 0) {
++                throw DriverException(HERE, "rte_eal_init failed");
++            }
++        };
++
++        if (args.empty()) {
++            // Initialize the DPDK environment with some default parameters.
++            // --file-prefix is needed to avoid false lock conflicts if servers
++            // run on different nodes, but with a shared NFS home directory.
++            // This is a bug in DPDK as of 9/2016; if the bug gets fixed, then
++            // the --file-prefix argument can be removed.
++            char nameBuffer[1000];
++            if (gethostname(nameBuffer, sizeof(nameBuffer)) != 0) {
++                throw DriverException(HERE, format("gethostname failed: %s",
++                        strerror(errno)));
++            }
++            nameBuffer[sizeof(nameBuffer)-1] = 0;   // Needed if name was too long.
++            const char *argv[] = {"rc", "--file-prefix", nameBuffer, "-c", "1",
++                    "-n", "1", NULL};
++            int argc = static_cast<int>(sizeof(argv) / sizeof(argv[0])) - 1;
++            dpdkInit(argc, const_cast<char**>(argv));
++        } else {
++            std::replace(args.begin(), args.end(), ' ', '\0');
++            int argc = static_cast<int>(std::count(args.begin(), args.end(), '\0') + 1);
++            char* cstr = const_cast<char*>(args.c_str());
++            char* argv[argc];
++            for (int i = 0, pos = 0; i < argc; ++i, pos = args.find_first_of('\0', pos) + 1)
++                argv[i] = cstr + pos;
++            dpdkInit(argc, argv);
++        }
+     }
+ 
+     // ensure that DPDK was able to detect a compatible and available NIC
+@@ -217,10 +229,29 @@ DpdkDriver::DpdkDriver(Context* context, int port)
+           }
+     }
+ 
++    int dpdk_socket = rte_eth_dev_socket_id(portId);
++    if (dpdk_socket < 0) {
++        throw DriverException(HERE, format("Unable to get socket for ethernet device."));
++    }
++
++    // create an memory pool for accommodating packet buffers
++    mbufPool = rte_mempool_create("mbuf_pool", NB_MBUF,
++            MBUF_SIZE, 32,
++            sizeof32(struct rte_pktmbuf_pool_private),
++            rte_pktmbuf_pool_init, NULL,
++            rte_pktmbuf_init, NULL,
++            dpdk_socket, 0);
++
++    if (!mbufPool) {
++        throw DriverException(HERE, format(
++                "Failed to allocate memory for packet buffers: %s",
++                rte_strerror(rte_errno)));
++    }
++
+     // setup and initialize the receive and transmit NIC queues,
+     // and activate the port.
+-    rte_eth_rx_queue_setup(portId, 0, NDESC, 0, NULL, mbufPool);
+-    rte_eth_tx_queue_setup(portId, 0, NDESC, 0, NULL);
++    rte_eth_rx_queue_setup(portId, 0, NDESC, dpdk_socket, NULL, mbufPool);
++    rte_eth_tx_queue_setup(portId, 0, NDESC, dpdk_socket, NULL);
+ 
+     // set the MTU that the NIC port should support
+     ret = rte_eth_dev_set_mtu(portId, MAX_PAYLOAD_SIZE);
+diff --git a/src/DpdkDriver.h b/src/DpdkDriver.h
+index ba6d2314..434e207d 100644
+--- a/src/DpdkDriver.h
++++ b/src/DpdkDriver.h
+@@ -57,7 +57,10 @@ class DpdkDriver : public Driver
+ #if TESTING
+     explicit DpdkDriver();
+ #endif
+-    explicit DpdkDriver(Context* context, int port = 0);
++    explicit DpdkDriver(Context* context,
++                        int port = 0,
++                        std::string args = "",
++                        bool skipInit = false);
+     virtual ~DpdkDriver();
+     virtual int getHighestPacketPriority();
+     virtual uint32_t getMaxPacketSize();
+diff --git a/src/OptionParser.cc b/src/OptionParser.cc
+index 1945cc64..50fb9138 100644
+--- a/src/OptionParser.cc
++++ b/src/OptionParser.cc
+@@ -234,6 +234,17 @@ OptionParser::setup(int argc, char* argv[])
+                 default_value(-1),
+              "Selects the Ethernet port that the DPDK driver should use, "
+              "or -1 if DPDK should not be enabled.")
++            ("dpdkArgs",
++             ProgramOptions::value<std::string>(&options.dpdkArgs)->
++                default_value(""),
++             "The arguments to give to rte_eal_init to initialize DPDK. If"
++             " empty then the arguments will be generated.")
++            ("dpdkSkipInit",
++             ProgramOptions::value<bool>(&options.dpdkSkipInit)->
++                default_value(false),
++             "Whether or not to skip rte_eal_init because it has already been"
++             " called. Default is false, which means rte_eal_init will be"
++             " called.")
+             ("portTimeout",
+              ProgramOptions::value<int32_t>(&options.portTimeout)->
+                 default_value(-1), // Overriding to the initial value.
+diff --git a/src/OptionParser.h b/src/OptionParser.h
+index d57a3f16..ca6d70b3 100644
+--- a/src/OptionParser.h
++++ b/src/OptionParser.h
+@@ -46,6 +46,8 @@ class CommandLineOptions {
+         , portTimeout(0)
+         , clusterName()
+         , dpdkPort(0)
++        , dpdkArgs("")
++        , dpdkSkipInit(false)
+     {
+     }
+ 
+@@ -118,6 +120,25 @@ class CommandLineOptions {
+         return dpdkPort;
+     }
+ 
++    /**
++     * Returns the arguments to give to rte_eal_init to initialize DPDK. If
++     * blank, one will be generated.
++     */
++    std::string getDpdkArgs() const
++    {
++        return dpdkArgs;
++    }
++
++    /**
++     * Returns whether or not rte_eal_init should be skipped when initializing
++     * DPDK. This can be done because DPDK has already been initialized by an
++     * application instantiating a RAMCloud::RAMCloud.
++     */
++    bool getDpdkSkipInit() const
++    {
++        return dpdkSkipInit;
++    }
++
+     string coordinatorLocator;      ///< See getCoordinatorLocator().
+     string localLocator;            ///< See getLocalLocator().
+     string externalStorageLocator;  ///< See getExternalStorageLocator().
+@@ -126,6 +147,8 @@ class CommandLineOptions {
+     int32_t  portTimeout;           ///< See getSessionTimeout().
+     string clusterName;             ///< See getClusterName().
+     int dpdkPort;                   ///< See getDpdkPort().
++    std::string dpdkArgs;           ///< See getDpdkArgs().
++    bool dpdkSkipInit;              ///< See getDpdkSkipInit().
+ };
+ 
+ /**
+diff --git a/src/TransportManager.cc b/src/TransportManager.cc
+index 59425165..14cfdb9d 100644
+--- a/src/TransportManager.cc
++++ b/src/TransportManager.cc
+@@ -157,7 +157,10 @@ TransportManager::TransportManager(Context* context)
+     if (context->options != NULL) {
+         int dpdkPort = context->options->getDpdkPort();
+         if (dpdkPort >= 0) {
+-            dpdkDriver = new DpdkDriver(context, dpdkPort);
++            dpdkDriver = new DpdkDriver(context,
++                                        dpdkPort,
++                                        context->options->getDpdkArgs(),
++                                        context->options->getDpdkSkipInit());
+             basicDpdkTransportFactory.setDpdkDriver(dpdkDriver);
+         }
+     }

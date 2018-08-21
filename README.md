@@ -29,8 +29,7 @@ stgit set up on the tip of the patch set.
 
 To make a new patch simply use `stg new patch-name.patch`, edit the files you
 want to include in the patch, use `stg refresh` to incorporate those changes
-into the patch, and finally use `stg export -pd ../patches` from the inner
-`RAMCloud` directory to export the new patch. Modifying an existing patch,
-reordering patches, rebasing onto newer upstream changes, and other operations
-are explained in the
-[stgit tutorial](http://procode.org/stgit/doc/tutorial.html).
+into the patch, and finally use `stg export -d ../` from the inner `RAMCloud`
+directory to export the new patch. Modifying an existing patch, reordering
+patches, rebasing onto newer upstream changes, and other operations are
+explained in the [stgit tutorial](http://procode.org/stgit/doc/tutorial.html).
