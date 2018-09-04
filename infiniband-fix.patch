@@ -6,8 +6,8 @@ From: Aaron Jones <aaron@vexing.codes>
 ---
  src/HaveInfiniband.cc |    3 ---
  src/InfUdDriver.cc    |    5 +++--
- src/Infiniband.cc     |   15 ++++++++-------
- 3 files changed, 11 insertions(+), 12 deletions(-)
+ src/Infiniband.cc     |   16 ++++++++--------
+ 3 files changed, 11 insertions(+), 13 deletions(-)
 
 diff --git a/src/HaveInfiniband.cc b/src/HaveInfiniband.cc
 index 502ba65b..f8ae8ca0 100644
@@ -40,7 +40,7 @@ index 3fa2e4d3..df629345 100644
                                       txcq, rxcq, MAX_TX_QUEUE_DEPTH,
                                       MAX_RX_QUEUE_DEPTH,
 diff --git a/src/Infiniband.cc b/src/Infiniband.cc
-index 93344f75..e30673f9 100644
+index 93344f75..6dcd7cbb 100644
 --- a/src/Infiniband.cc
 +++ b/src/Infiniband.cc
 @@ -520,7 +520,8 @@ Infiniband::QueuePair::QueuePair(Infiniband& infiniband, ibv_qp_type type,
@@ -89,15 +89,16 @@ index 93344f75..e30673f9 100644
      }
  
 -    if (type == IBV_QPT_RAW_ETH) {
-+/*    if (type == IBV_QPT_RAW_ETH) {
++//    if (type == IBV_QPT_RAW_ETH) {
          ibv_gid mgid;
          memset(&mgid, 0, sizeof(mgid));
          memcpy(&mgid.raw[10], localMac->address, 6);
-@@ -723,6 +723,7 @@ Infiniband::QueuePair::activate(const Tub<MacAddress>& localMac)
+@@ -722,7 +722,7 @@ Infiniband::QueuePair::activate(const Tub<MacAddress>& localMac)
+             LOG(ERROR, "failed to bind to mac address");
              throw TransportException(HERE, ret);
          }
-     }
-+*/
+-    }
++//    }
  }
  
  /**
