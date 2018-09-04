@@ -1,0 +1,154 @@
+Add command-line parameter allowing users to specify VLAN tag.
+
+From: Aaron Jones <aaron@vexing.codes>
+
+Adds command-line parameter "--dpdkVlanTag" allowing the VLAN tag for
+DPDK outgoing packets to be specified.
+---
+ src/DpdkDriver.cc       |   13 +++++++++++--
+ src/DpdkDriver.h        |    6 +++++-
+ src/OptionParser.cc     |    4 ++++
+ src/OptionParser.h      |   10 ++++++++++
+ src/TransportManager.cc |    3 ++-
+ 5 files changed, 32 insertions(+), 4 deletions(-)
+
+diff --git a/src/DpdkDriver.cc b/src/DpdkDriver.cc
+index 52795e5e..012136aa 100644
+--- a/src/DpdkDriver.cc
++++ b/src/DpdkDriver.cc
+@@ -97,6 +97,7 @@ DpdkDriver::DpdkDriver()
+     , bandwidthMbps(10000)
+     , highestPriorityAvail(7)
+     , lowestPriorityAvail(0)
++    , vlanTag(0)
+     , fileLogger(NOTICE, "DPDK: ")
+ {
+     localMac.construct("01:23:45:67:89:ab");
+@@ -124,7 +125,8 @@ DpdkDriver::DpdkDriver()
+ DpdkDriver::DpdkDriver(Context* context,
+                        int port,
+                        std::string args,
+-                       bool skipInit)
++                       bool skipInit,
++                       uint16_t tag)
+     : context(context)
+     , packetBufPool()
+     , packetBufsUtilized(0)
+@@ -139,6 +141,7 @@ DpdkDriver::DpdkDriver(Context* context,
+     // Assume we are allowed to use all 8 ethernet priorities.
+     , highestPriorityAvail(7)
+     , lowestPriorityAvail(0)
++    , vlanTag(tag)
+     , fileLogger(NOTICE, "DPDK: ")
+ {
+     struct ether_addr mac;
+@@ -146,6 +149,12 @@ DpdkDriver::DpdkDriver(Context* context,
+     struct rte_eth_conf portConf;
+     int ret;
+ 
++    if (vlanTag >= 4095) {
++        throw DriverException(HERE,
++                              "Bad vlan tag, expected vlanTag < 4095, got %i",
++                              static_cast<int>(vlanTag));
++    }
++
+     portId = downCast<uint8_t>(port);
+ 
+     // Initialize the DPDK environment with some default parameters.
+@@ -559,7 +568,7 @@ DpdkDriver::sendPacket(const Address* addr,
+     // Fill out the PCP field and the Ethernet frame type of the encapsulated
+     // frame (DEI and VLAN ID are not relevant and trivially set to 0).
+     struct vlan_hdr* vlanHdr = reinterpret_cast<struct vlan_hdr*>(p);
+-    vlanHdr->vlan_tci = rte_cpu_to_be_16(PRIORITY_TO_PCP[priority]);
++    vlanHdr->vlan_tci = rte_cpu_to_be_16(PRIORITY_TO_PCP[priority] | vlanTag);
+     vlanHdr->eth_proto = rte_cpu_to_be_16(NetUtil::EthPayloadType::RAMCLOUD);
+     p += VLAN_TAG_LEN;
+ 
+diff --git a/src/DpdkDriver.h b/src/DpdkDriver.h
+index 434e207d..4b5935ca 100644
+--- a/src/DpdkDriver.h
++++ b/src/DpdkDriver.h
+@@ -60,7 +60,8 @@ class DpdkDriver : public Driver
+     explicit DpdkDriver(Context* context,
+                         int port = 0,
+                         std::string args = "",
+-                        bool skipInit = false);
++                        bool skipInit = false,
++                        uint16_t tag = 0);
+     virtual ~DpdkDriver();
+     virtual int getHighestPacketPriority();
+     virtual uint32_t getMaxPacketSize();
+@@ -179,6 +180,9 @@ class DpdkDriver : public Driver
+     /// be `highestPriorityAvail - lowestPriorityAvail + 1`.
+     int lowestPriorityAvail;
+ 
++    /// The VLAN tag to put into outgoing packets.
++    uint16_t vlanTag;
++
+     /// Used to redirect log entries from the DPDK log into the RAMCloud log.
+     FileLogger fileLogger;
+ 
+diff --git a/src/OptionParser.cc b/src/OptionParser.cc
+index 50fb9138..7876a725 100644
+--- a/src/OptionParser.cc
++++ b/src/OptionParser.cc
+@@ -245,6 +245,10 @@ OptionParser::setup(int argc, char* argv[])
+              "Whether or not to skip rte_eal_init because it has already been"
+              " called. Default is false, which means rte_eal_init will be"
+              " called.")
++            ("dpdkVlanTag",
++             ProgramOptions::value<uint16_t>(&options.dpdkVlanTag)->
++                default_value(0),
++             "The VLAN tag to include in outgoing DPDK packets.")
+             ("portTimeout",
+              ProgramOptions::value<int32_t>(&options.portTimeout)->
+                 default_value(-1), // Overriding to the initial value.
+diff --git a/src/OptionParser.h b/src/OptionParser.h
+index ca6d70b3..c9ef9759 100644
+--- a/src/OptionParser.h
++++ b/src/OptionParser.h
+@@ -48,6 +48,7 @@ class CommandLineOptions {
+         , dpdkPort(0)
+         , dpdkArgs("")
+         , dpdkSkipInit(false)
++        , dpdkVlanTag(0)
+     {
+     }
+ 
+@@ -139,6 +140,14 @@ class CommandLineOptions {
+         return dpdkSkipInit;
+     }
+ 
++    /**
++     * Gets the VLAN tag that should be used in packets outgoing from RAMCloud.
++     */
++    uint16_t getDpdkVlanTag() const
++    {
++        return dpdkVlanTag;
++    }
++
+     string coordinatorLocator;      ///< See getCoordinatorLocator().
+     string localLocator;            ///< See getLocalLocator().
+     string externalStorageLocator;  ///< See getExternalStorageLocator().
+@@ -149,6 +158,7 @@ class CommandLineOptions {
+     int dpdkPort;                   ///< See getDpdkPort().
+     std::string dpdkArgs;           ///< See getDpdkArgs().
+     bool dpdkSkipInit;              ///< See getDpdkSkipInit().
++    uint16_t dpdkVlanTag;           ///< See getDpdkVlanTag().
+ };
+ 
+ /**
+diff --git a/src/TransportManager.cc b/src/TransportManager.cc
+index 14cfdb9d..ede7e501 100644
+--- a/src/TransportManager.cc
++++ b/src/TransportManager.cc
+@@ -160,7 +160,8 @@ TransportManager::TransportManager(Context* context)
+             dpdkDriver = new DpdkDriver(context,
+                                         dpdkPort,
+                                         context->options->getDpdkArgs(),
+-                                        context->options->getDpdkSkipInit());
++                                        context->options->getDpdkSkipInit(),
++                                        context->options->getDpdkVlanTag());
+             basicDpdkTransportFactory.setDpdkDriver(dpdkDriver);
+         }
+     }
