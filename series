@@ -4,3 +4,4 @@ infiniband-fix.patch
 dpdk-config.patch
 vlan-tag.patch
 debug.patch
+fix-dpdk-mbuf-release.patch
