@@ -1,0 +1,39 @@
+Debug logging.
+
+From: Aaron Jones <aaron@vexing.codes>
+
+
+---
+ src/DpdkDriver.cc |    4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/src/DpdkDriver.cc b/src/DpdkDriver.cc
+index 012136aa..7d3dae23 100644
+--- a/src/DpdkDriver.cc
++++ b/src/DpdkDriver.cc
+@@ -474,14 +474,17 @@ DpdkDriver::release(char *payload)
+ void
+ DpdkDriver::releaseHint(int maxCount)
+ {
++    LOG(NOTICE, "STATELESS DEBUG - in releaseHint with maxCount=%i", maxCount);
+     while ((maxCount != 0) && !payloadsToRelease.empty()) {
+         maxCount--;
+         char* payload = payloadsToRelease.back();
+         payloadsToRelease.pop_back();
++        LOG(NOTICE, "STATELESS DEBUG - releasing payload=%p", payload);
+ 
+         packetBufsUtilized--;
+         assert(packetBufsUtilized >= 0);
+         if (packet_buf_type(payload) == DPDK_MBUF) {
++            LOG(NOTICE, "STATELESS DEBUG - releasing DPDK payload=%p", payload_to_mbuf(payload));
+             rte_pktmbuf_free(payload_to_mbuf(payload));
+         } else {
+             packetBufPool.destroy(reinterpret_cast<PacketBuf*>(
+@@ -531,6 +534,7 @@ DpdkDriver::sendPacket(const Address* addr,
+     struct rte_mbuf* mbuf = &mockMbuf;
+ #else
+     struct rte_mbuf* mbuf = rte_pktmbuf_alloc(mbufPool);
++    LOG(NOTICE, "STATELESS DEBUG - allocated DPDK buf=%p", mbuf);
+ #endif
+     if (unlikely(NULL == mbuf)) {
+         uint32_t numMbufsAvail = rte_mempool_avail_count(mbufPool);
