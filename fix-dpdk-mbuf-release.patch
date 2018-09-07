@@ -8,7 +8,7 @@ From: Aaron Jones <aaron@vexing.codes>
  1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/src/DpdkDriver.cc b/src/DpdkDriver.cc
-index 8c886199..b772d537 100644
+index 7f6bc040..a8ee1c52 100644
 --- a/src/DpdkDriver.cc
 +++ b/src/DpdkDriver.cc
 @@ -75,7 +75,7 @@ namespace {

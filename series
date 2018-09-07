@@ -3,4 +3,3 @@ disable-log-before-main.patch
 infiniband-fix.patch
 fix-dpdk-mbuf-release.patch
 dpdk-config.patch
-vlan-tag.patch
