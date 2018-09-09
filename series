@@ -2,3 +2,4 @@
 disable-log-before-main.patch
 fix-dpdk-mbuf-release.patch
 dpdk-config.patch
+roce-fix.patch
