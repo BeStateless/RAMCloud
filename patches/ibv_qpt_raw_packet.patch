@@ -1,0 +1,88 @@
+Change RC to check for IBV_QPT_RAW_PACKET (which is provided by Mellanox) rather than IBV_QPT_RAW_ETH (which is not).  As far as I can tell these are the exact same thing.
+
+From: Daniel Noland <daniel@bestateless.com>
+
+
+---
+ src/HaveInfiniband.cc |    4 ++--
+ src/InfUdDriver.cc    |    2 +-
+ src/Infiniband.cc     |   10 +++++-----
+ 3 files changed, 8 insertions(+), 8 deletions(-)
+
+diff --git a/src/HaveInfiniband.cc b/src/HaveInfiniband.cc
+index 502ba65b..b8c13f05 100644
+--- a/src/HaveInfiniband.cc
++++ b/src/HaveInfiniband.cc
+@@ -23,8 +23,8 @@
+ 
+ int main() {
+     int r;
+-    static_assert(IBV_QPT_RAW_ETH >= 0,
+-            "Symbol `IBV_QPT_RAW_ETH` is undefined; consider upgrading "
++    static_assert(IBV_QPT_RAW_PACKET >= 0,
++            "Symbol `IBV_QPT_RAW_PACKET` is undefined; consider upgrading "
+             "your libverbs.");
+     ibv_free_device_list(ibv_get_device_list(&r));
+     return r;
+diff --git a/src/InfUdDriver.cc b/src/InfUdDriver.cc
+index 3fa2e4d3..9770c598 100644
+--- a/src/InfUdDriver.cc
++++ b/src/InfUdDriver.cc
+@@ -158,7 +158,7 @@ InfUdDriver::InfUdDriver(Context* context, const ServiceLocator *sl,
+         throw DriverException(HERE, errno);
+     }
+ 
+-    qp = infiniband->createQueuePair(localMac ? IBV_QPT_RAW_ETH
++    qp = infiniband->createQueuePair(localMac ? IBV_QPT_RAW_PACKET
+                                               : IBV_QPT_UD,
+                                      ibPhysicalPort, NULL,
+                                      txcq, rxcq, MAX_TX_QUEUE_DEPTH,
+diff --git a/src/Infiniband.cc b/src/Infiniband.cc
+index 93344f75..fc4c763b 100644
+--- a/src/Infiniband.cc
++++ b/src/Infiniband.cc
+@@ -520,7 +520,7 @@ Infiniband::QueuePair::QueuePair(Infiniband& infiniband, ibv_qp_type type,
+       peerLid(0)
+ {
+     snprintf(peerName, sizeof(peerName), "?unknown?");
+-    if (type != IBV_QPT_RC && type != IBV_QPT_UD && type != IBV_QPT_RAW_ETH)
++    if (type != IBV_QPT_RC && type != IBV_QPT_UD && type != IBV_QPT_RAW_PACKET)
+         throw TransportException(HERE, "invalid queue pair type");
+ 
+     ibv_qp_init_attr qpia;
+@@ -564,7 +564,7 @@ Infiniband::QueuePair::QueuePair(Infiniband& infiniband, ibv_qp_type type,
+         mask |= IBV_QP_QKEY;
+         mask |= IBV_QP_PKEY_INDEX;
+         break;
+-    case IBV_QPT_RAW_ETH:
++    case IBV_QPT_RAW_PACKET:
+         break;
+     default:
+         assert(0);
+@@ -683,7 +683,7 @@ void
+ Infiniband::QueuePair::activate(const Tub<MacAddress>& localMac)
+ {
+     ibv_qp_attr qpa;
+-    if (type != IBV_QPT_UD && type != IBV_QPT_RAW_ETH)
++    if (type != IBV_QPT_UD && type != IBV_QPT_RAW_PACKET)
+         throw TransportException(HERE, "activate() called on wrong qp type");
+ 
+     if (getState() != IBV_QPS_INIT) {
+@@ -704,7 +704,7 @@ Infiniband::QueuePair::activate(const Tub<MacAddress>& localMac)
+     // now move to RTS state
+     qpa.qp_state = IBV_QPS_RTS;
+     int flags = IBV_QP_STATE;
+-    if (type != IBV_QPT_RAW_ETH) {
++    if (type != IBV_QPT_RAW_PACKET) {
+         qpa.sq_psn = initialPsn;
+         flags |= IBV_QP_SQ_PSN;
+     }
+@@ -714,7 +714,7 @@ Infiniband::QueuePair::activate(const Tub<MacAddress>& localMac)
+         throw TransportException(HERE, ret);
+     }
+ 
+-    if (type == IBV_QPT_RAW_ETH) {
++    if (type == IBV_QPT_RAW_PACKET) {
+         ibv_gid mgid;
+         memset(&mgid, 0, sizeof(mgid));
+         memcpy(&mgid.raw[10], localMac->address, 6);
