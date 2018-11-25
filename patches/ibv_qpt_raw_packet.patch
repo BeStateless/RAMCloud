@@ -25,14 +25,14 @@ index 502ba65b..b8c13f05 100644
      ibv_free_device_list(ibv_get_device_list(&r));
      return r;
 diff --git a/src/InfUdDriver.cc b/src/InfUdDriver.cc
-index 3fa2e4d3..32fe849b 100644
+index 3fa2e4d3..9cbc95bb 100644
 --- a/src/InfUdDriver.cc
 +++ b/src/InfUdDriver.cc
 @@ -85,6 +85,7 @@ InfUdDriver::InfUdDriver(Context* context, const ServiceLocator *sl,
      , zeroCopyRegion(NULL)
      , sendsSinceLastReap(0)
  {
-+    LOG(NOTICE, "ethernet: %b", ethernet);
++    LOG(NOTICE, "ethernet: %u", static_cast<unsigned int>(ethernet));
      const char *ibDeviceName = NULL;
      bool macAddressProvided = false;
  
@@ -49,8 +49,8 @@ index 3fa2e4d3..32fe849b 100644
      if (ethernet && !macAddressProvided)
          localMac.construct(MacAddress::RANDOM);
  
-+    LOG(NOTICE, "localMac: %s", localMac->toString());
-+    LOG(NOTICE, "ibDeviceName: %s", ibDeviceName);
++    LOG(NOTICE, "localMac: %s", localMac ? localMac->toString() : "0");
++    LOG(NOTICE, "ibDeviceName: %s", ibDeviceName ? ibDeviceName : "no device name");
 +
      infiniband = realInfiniband.construct(ibDeviceName);
  
