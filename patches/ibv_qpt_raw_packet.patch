@@ -5,10 +5,10 @@ From: Daniel Noland <daniel@bestateless.com>
 
 ---
  src/HaveInfiniband.cc   |    4 ++--
- src/InfUdDriver.cc      |   14 ++++++++++++--
- src/Infiniband.cc       |   14 ++++++++------
+ src/InfUdDriver.cc      |   13 ++++++++++++-
+ src/Infiniband.cc       |   19 +++++++++++++------
  src/TransportManager.cc |    2 +-
- 4 files changed, 23 insertions(+), 11 deletions(-)
+ 4 files changed, 28 insertions(+), 10 deletions(-)
 
 diff --git a/src/HaveInfiniband.cc b/src/HaveInfiniband.cc
 index 502ba65b..b8c13f05 100644
@@ -26,7 +26,7 @@ index 502ba65b..b8c13f05 100644
      ibv_free_device_list(ibv_get_device_list(&r));
      return r;
 diff --git a/src/InfUdDriver.cc b/src/InfUdDriver.cc
-index 3fa2e4d3..f9ce641e 100644
+index 3fa2e4d3..9cbc95bb 100644
 --- a/src/InfUdDriver.cc
 +++ b/src/InfUdDriver.cc
 @@ -85,6 +85,7 @@ InfUdDriver::InfUdDriver(Context* context, const ServiceLocator *sl,
@@ -60,19 +60,18 @@ index 3fa2e4d3..f9ce641e 100644
      // Allocate buffer pools.
      uint32_t bufSize = (maxPacketSize +
          (localMac ? sizeof32(EthernetHeader) : GRH_SIZE));
-@@ -158,8 +166,9 @@ InfUdDriver::InfUdDriver(Context* context, const ServiceLocator *sl,
+@@ -158,7 +166,9 @@ InfUdDriver::InfUdDriver(Context* context, const ServiceLocator *sl,
          throw DriverException(HERE, errno);
      }
  
 -    qp = infiniband->createQueuePair(localMac ? IBV_QPT_RAW_ETH
--                                              : IBV_QPT_UD,
 +    LOG(NOTICE, "ibPhysicalPort: %d", ibPhysicalPort);
 +
-+    qp = infiniband->createQueuePair(IBV_QPT_UD,
++    qp = infiniband->createQueuePair(localMac ? IBV_QPT_RAW_PACKET
+                                               : IBV_QPT_UD,
                                       ibPhysicalPort, NULL,
                                       txcq, rxcq, MAX_TX_QUEUE_DEPTH,
-                                      MAX_RX_QUEUE_DEPTH,
-@@ -167,6 +176,7 @@ InfUdDriver::InfUdDriver(Context* context, const ServiceLocator *sl,
+@@ -167,6 +177,7 @@ InfUdDriver::InfUdDriver(Context* context, const ServiceLocator *sl,
  
      // Cache these for easier access.
      lid = infiniband->getLid(ibPhysicalPort);
@@ -81,10 +80,20 @@ index 3fa2e4d3..f9ce641e 100644
  
      // Update our locatorString, if one was provided, with the dynamic
 diff --git a/src/Infiniband.cc b/src/Infiniband.cc
-index 93344f75..25f59bca 100644
+index 93344f75..26c3deb3 100644
 --- a/src/Infiniband.cc
 +++ b/src/Infiniband.cc
-@@ -520,7 +520,7 @@ Infiniband::QueuePair::QueuePair(Infiniband& infiniband, ibv_qp_type type,
+@@ -13,6 +13,9 @@
+  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+  */
+ 
++#include <errno.h>
++
++
+ #include "CycleCounter.h"
+ #include "Infiniband.h"
+ #include "RawMetrics.h"
+@@ -520,7 +523,7 @@ Infiniband::QueuePair::QueuePair(Infiniband& infiniband, ibv_qp_type type,
        peerLid(0)
  {
      snprintf(peerName, sizeof(peerName), "?unknown?");
@@ -93,7 +102,7 @@ index 93344f75..25f59bca 100644
          throw TransportException(HERE, "invalid queue pair type");
  
      ibv_qp_init_attr qpia;
-@@ -564,7 +564,7 @@ Infiniband::QueuePair::QueuePair(Infiniband& infiniband, ibv_qp_type type,
+@@ -564,7 +567,7 @@ Infiniband::QueuePair::QueuePair(Infiniband& infiniband, ibv_qp_type type,
          mask |= IBV_QP_QKEY;
          mask |= IBV_QP_PKEY_INDEX;
          break;
@@ -102,7 +111,7 @@ index 93344f75..25f59bca 100644
          break;
      default:
          assert(0);
-@@ -683,7 +683,7 @@ void
+@@ -683,7 +686,7 @@ void
  Infiniband::QueuePair::activate(const Tub<MacAddress>& localMac)
  {
      ibv_qp_attr qpa;
@@ -111,7 +120,7 @@ index 93344f75..25f59bca 100644
          throw TransportException(HERE, "activate() called on wrong qp type");
  
      if (getState() != IBV_QPS_INIT) {
-@@ -704,7 +704,7 @@ Infiniband::QueuePair::activate(const Tub<MacAddress>& localMac)
+@@ -704,7 +707,7 @@ Infiniband::QueuePair::activate(const Tub<MacAddress>& localMac)
      // now move to RTS state
      qpa.qp_state = IBV_QPS_RTS;
      int flags = IBV_QP_STATE;
@@ -120,7 +129,7 @@ index 93344f75..25f59bca 100644
          qpa.sq_psn = initialPsn;
          flags |= IBV_QP_SQ_PSN;
      }
-@@ -714,12 +714,14 @@ Infiniband::QueuePair::activate(const Tub<MacAddress>& localMac)
+@@ -714,12 +717,16 @@ Infiniband::QueuePair::activate(const Tub<MacAddress>& localMac)
          throw TransportException(HERE, ret);
      }
  
@@ -132,8 +141,10 @@ index 93344f75..25f59bca 100644
 -        if (ibv_attach_mcast(qp, &mgid, 0)) {
 +        const int rval = ibv_attach_mcast(qp, &mgid, 0);
 +        if (rval != 0) {
++            const char* errorstr = strerror(rval);
              LOG(ERROR, "failed to bind to mac address");
 +            LOG(ERROR, "ibv_attach_mcast failed with rval %d", rval);
++            LOG(ERROR, "ibv_attach_mcast failed with errorstr %s", errorstr);
              throw TransportException(HERE, ret);
          }
      }
