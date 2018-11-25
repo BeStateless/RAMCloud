@@ -25,7 +25,7 @@ index 502ba65b..b8c13f05 100644
      ibv_free_device_list(ibv_get_device_list(&r));
      return r;
 diff --git a/src/InfUdDriver.cc b/src/InfUdDriver.cc
-index 3fa2e4d3..de16483b 100644
+index 3fa2e4d3..e611aa72 100644
 --- a/src/InfUdDriver.cc
 +++ b/src/InfUdDriver.cc
 @@ -85,6 +85,7 @@ InfUdDriver::InfUdDriver(Context* context, const ServiceLocator *sl,
@@ -54,7 +54,7 @@ index 3fa2e4d3..de16483b 100644
 +
      infiniband = realInfiniband.construct(ibDeviceName);
  
-+    LOG(NOTICE, "infiniband: %u", infiniband);
++    //LOG(NOTICE, "infiniband: %u", infiniband);
 +
      // Allocate buffer pools.
      uint32_t bufSize = (maxPacketSize +
