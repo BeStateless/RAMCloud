@@ -4,10 +4,11 @@ From: Daniel Noland <daniel@bestateless.com>
 
 
 ---
- src/HaveInfiniband.cc |    4 ++--
- src/InfUdDriver.cc    |   13 ++++++++++++-
- src/Infiniband.cc     |   10 +++++-----
- 3 files changed, 19 insertions(+), 8 deletions(-)
+ src/HaveInfiniband.cc   |    4 ++--
+ src/InfUdDriver.cc      |   13 ++++++++++++-
+ src/Infiniband.cc       |   10 +++++-----
+ src/TransportManager.cc |    2 +-
+ 4 files changed, 20 insertions(+), 9 deletions(-)
 
 diff --git a/src/HaveInfiniband.cc b/src/HaveInfiniband.cc
 index 502ba65b..b8c13f05 100644
@@ -127,3 +128,16 @@ index 93344f75..fc4c763b 100644
          ibv_gid mgid;
          memset(&mgid, 0, sizeof(mgid));
          memcpy(&mgid.raw[10], localMac->address, 6);
+diff --git a/src/TransportManager.cc b/src/TransportManager.cc
+index ede7e501..e2bcca01 100644
+--- a/src/TransportManager.cc
++++ b/src/TransportManager.cc
+@@ -82,7 +82,7 @@ static struct BasicInfUdTransportFactory : public TransportFactory {
+     Transport* createTransport(Context* context,
+             const ServiceLocator* localServiceLocator) {
+         return new BasicTransport(context, localServiceLocator,
+-                new InfUdDriver(context, localServiceLocator, false), true,
++                new InfUdDriver(context, localServiceLocator, true), true,
+                 generateRandom());
+     }
+ } basicInfUdTransportFactory;
