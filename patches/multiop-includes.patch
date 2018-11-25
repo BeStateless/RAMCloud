@@ -6,7 +6,8 @@ Include MultiRead.h, MultiWrite.h, and MultiRemove.h in the installed includes
 so the asynchronous interfaces of these operations can be employed by client
 programs.
 ---
- 0 files changed
+ GNUmakefile |    5 +++++
+ 1 file changed, 5 insertions(+)
 
 diff --git a/GNUmakefile b/GNUmakefile
 index 7e9dedd6..26d54640 100644
