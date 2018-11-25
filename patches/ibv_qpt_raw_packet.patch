@@ -6,9 +6,9 @@ From: Daniel Noland <daniel@bestateless.com>
 ---
  src/HaveInfiniband.cc   |    4 ++--
  src/InfUdDriver.cc      |   13 ++++++++++++-
- src/Infiniband.cc       |   10 +++++-----
+ src/Infiniband.cc       |   14 ++++++++------
  src/TransportManager.cc |    2 +-
- 4 files changed, 20 insertions(+), 9 deletions(-)
+ 4 files changed, 23 insertions(+), 10 deletions(-)
 
 diff --git a/src/HaveInfiniband.cc b/src/HaveInfiniband.cc
 index 502ba65b..b8c13f05 100644
@@ -80,7 +80,7 @@ index 3fa2e4d3..9cbc95bb 100644
  
      // Update our locatorString, if one was provided, with the dynamic
 diff --git a/src/Infiniband.cc b/src/Infiniband.cc
-index 93344f75..fc4c763b 100644
+index 93344f75..25f59bca 100644
 --- a/src/Infiniband.cc
 +++ b/src/Infiniband.cc
 @@ -520,7 +520,7 @@ Infiniband::QueuePair::QueuePair(Infiniband& infiniband, ibv_qp_type type,
@@ -119,7 +119,7 @@ index 93344f75..fc4c763b 100644
          qpa.sq_psn = initialPsn;
          flags |= IBV_QP_SQ_PSN;
      }
-@@ -714,7 +714,7 @@ Infiniband::QueuePair::activate(const Tub<MacAddress>& localMac)
+@@ -714,12 +714,14 @@ Infiniband::QueuePair::activate(const Tub<MacAddress>& localMac)
          throw TransportException(HERE, ret);
      }
  
@@ -128,6 +128,14 @@ index 93344f75..fc4c763b 100644
          ibv_gid mgid;
          memset(&mgid, 0, sizeof(mgid));
          memcpy(&mgid.raw[10], localMac->address, 6);
+-        if (ibv_attach_mcast(qp, &mgid, 0)) {
++        const int rval = ibv_attach_mcast(qp, &mgid, 0);
++        if (rval != 0) {
+             LOG(ERROR, "failed to bind to mac address");
++            LOG(ERROR, "ibv_attach_mcast failed with rval %d", rval);
+             throw TransportException(HERE, ret);
+         }
+     }
 diff --git a/src/TransportManager.cc b/src/TransportManager.cc
 index ede7e501..e2bcca01 100644
 --- a/src/TransportManager.cc
