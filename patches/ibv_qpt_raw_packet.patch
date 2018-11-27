@@ -5,9 +5,9 @@ From: Daniel Noland <daniel@bestateless.com>
 
 ---
  src/HaveInfiniband.cc |    4 ++--
- src/InfUdDriver.cc    |   33 ++++++++++++++++++++++-----------
+ src/InfUdDriver.cc    |   40 ++++++++++++++++++++++++----------------
  src/Infiniband.cc     |   19 +++++++++++++------
- 3 files changed, 37 insertions(+), 19 deletions(-)
+ 3 files changed, 39 insertions(+), 24 deletions(-)
 
 diff --git a/src/HaveInfiniband.cc b/src/HaveInfiniband.cc
 index 502ba65b..b8c13f05 100644
@@ -25,10 +25,10 @@ index 502ba65b..b8c13f05 100644
      ibv_free_device_list(ibv_get_device_list(&r));
      return r;
 diff --git a/src/InfUdDriver.cc b/src/InfUdDriver.cc
-index 3fa2e4d3..8dee5043 100644
+index 3fa2e4d3..1daa485e 100644
 --- a/src/InfUdDriver.cc
 +++ b/src/InfUdDriver.cc
-@@ -85,6 +85,7 @@ InfUdDriver::InfUdDriver(Context* context, const ServiceLocator *sl,
+@@ -85,18 +85,17 @@ InfUdDriver::InfUdDriver(Context* context, const ServiceLocator *sl,
      , zeroCopyRegion(NULL)
      , sendsSinceLastReap(0)
  {
@@ -36,22 +36,23 @@ index 3fa2e4d3..8dee5043 100644
      const char *ibDeviceName = NULL;
      bool macAddressProvided = false;
  
-@@ -92,10 +93,10 @@ InfUdDriver::InfUdDriver(Context* context, const ServiceLocator *sl,
+     if (sl != NULL) {
          locatorString = sl->getDriverLocatorString();
  
-         if (ethernet) {
+-        if (ethernet) {
 -            try {
 -                localMac.construct(sl->getOption<const char*>("mac"));
 -                macAddressProvided = true;
 -            } catch (ServiceLocator::NoSuchKeyException& e) {}
-+          try {
-+              localMac.construct(sl->getOption<const char*>("mac"));
-+              macAddressProvided = true;
-+          } catch (ServiceLocator::NoSuchKeyException& e) {}
-         }
+-        }
++        try {
++            localMac.construct(sl->getOption<const char*>("mac"));
++            macAddressProvided = true;
++        } catch (ServiceLocator::NoSuchKeyException& e) {}
  
          try {
-@@ -109,7 +110,10 @@ InfUdDriver::InfUdDriver(Context* context, const ServiceLocator *sl,
+             ibDeviceName   = sl->getOption<const char *>("dev");
+@@ -109,7 +108,10 @@ InfUdDriver::InfUdDriver(Context* context, const ServiceLocator *sl,
          try {
              bandwidthGbps = sl->getOption<int>("gbs");
          } catch (ServiceLocator::NoSuchKeyException& e) {}
@@ -62,7 +63,7 @@ index 3fa2e4d3..8dee5043 100644
      queueEstimator.setBandwidth(1000*bandwidthGbps);
      maxTransmitQueueSize = (uint32_t) (static_cast<double>(bandwidthGbps)
              * MAX_DRAIN_TIME / 8.0);
-@@ -125,11 +129,17 @@ InfUdDriver::InfUdDriver(Context* context, const ServiceLocator *sl,
+@@ -125,11 +127,17 @@ InfUdDriver::InfUdDriver(Context* context, const ServiceLocator *sl,
      if (ethernet && !macAddressProvided)
          localMac.construct(MacAddress::RANDOM);
  
@@ -82,7 +83,7 @@ index 3fa2e4d3..8dee5043 100644
      bufSize = BitOps::powerOfTwoGreaterOrEqual(bufSize);
      uint64_t start = Cycles::rdtsc();
  
-@@ -158,8 +168,7 @@ InfUdDriver::InfUdDriver(Context* context, const ServiceLocator *sl,
+@@ -158,8 +166,7 @@ InfUdDriver::InfUdDriver(Context* context, const ServiceLocator *sl,
          throw DriverException(HERE, errno);
      }
  
@@ -92,7 +93,7 @@ index 3fa2e4d3..8dee5043 100644
                                       ibPhysicalPort, NULL,
                                       txcq, rxcq, MAX_TX_QUEUE_DEPTH,
                                       MAX_RX_QUEUE_DEPTH,
-@@ -167,6 +176,7 @@ InfUdDriver::InfUdDriver(Context* context, const ServiceLocator *sl,
+@@ -167,6 +174,7 @@ InfUdDriver::InfUdDriver(Context* context, const ServiceLocator *sl,
  
      // Cache these for easier access.
      lid = infiniband->getLid(ibPhysicalPort);
@@ -100,7 +101,20 @@ index 3fa2e4d3..8dee5043 100644
      qpn = qp->getLocalQpNumber();
  
      // Update our locatorString, if one was provided, with the dynamic
-@@ -212,9 +222,10 @@ InfUdDriver::~InfUdDriver()
+@@ -178,10 +186,9 @@ InfUdDriver::InfUdDriver(Context* context, const ServiceLocator *sl,
+         }
+         if (localMac) {
+             if (!macAddressProvided)
+-                locatorString += "mac=" + localMac->toString();
+-        } else {
+-            locatorString += format("lid=%u,qpn=%u", lid, qpn);
++                locatorString += "mac=" + localMac->toString() + ",";
+         }
++        locatorString += format("lid=%u,qpn=%u", lid, qpn);
+         LOG(NOTICE, "Locator for InfUdDriver: %s", locatorString.c_str());
+     }
+ 
+@@ -212,9 +219,10 @@ InfUdDriver::~InfUdDriver()
  uint32_t
  InfUdDriver::getMaxPacketSize()
  {
