@@ -25,7 +25,7 @@ index 502ba65b..b8c13f05 100644
      ibv_free_device_list(ibv_get_device_list(&r));
      return r;
 diff --git a/src/InfUdDriver.cc b/src/InfUdDriver.cc
-index 3fa2e4d3..59f38f5d 100644
+index 3fa2e4d3..528748bb 100644
 --- a/src/InfUdDriver.cc
 +++ b/src/InfUdDriver.cc
 @@ -85,18 +85,17 @@ InfUdDriver::InfUdDriver(Context* context, const ServiceLocator *sl,
@@ -78,7 +78,7 @@ index 3fa2e4d3..59f38f5d 100644
      // Allocate buffer pools.
 -    uint32_t bufSize = (maxPacketSize +
 -        (localMac ? sizeof32(EthernetHeader) : GRH_SIZE));
-+    uint32_t bufSize = maxPacketSize + GRH_SIZE;
++    uint32_t bufSize = maxPacketSize + GRH_SIZE + 2 * sizeof32(EthernetHeader) ;
 +        /* (localMac ? sizeof32(EthernetHeader) : GRH_SIZE)); */
      bufSize = BitOps::powerOfTwoGreaterOrEqual(bufSize);
      uint64_t start = Cycles::rdtsc();
@@ -109,7 +109,7 @@ index 3fa2e4d3..59f38f5d 100644
 -    const uint32_t inf = 2048 - GRH_SIZE;
 -    return localMac ? eth : inf;
 +    /* const uint32_t eth = 1500 + 14 - sizeof32(EthernetHeader); */
-+    const uint32_t inf = 1024 - GRH_SIZE;
++    const uint32_t inf = 1024 - GRH_SIZE - 2 * sizeof32(EthernetHeader);
 +    return inf;
 +    /* return localMac ? eth : inf; */
  }
