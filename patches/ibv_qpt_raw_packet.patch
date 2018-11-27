@@ -129,7 +129,7 @@ index 3fa2e4d3..1daa485e 100644
  
  /**
 diff --git a/src/Infiniband.cc b/src/Infiniband.cc
-index 93344f75..26c3deb3 100644
+index 93344f75..4d44d53a 100644
 --- a/src/Infiniband.cc
 +++ b/src/Infiniband.cc
 @@ -13,6 +13,9 @@
@@ -183,7 +183,7 @@ index 93344f75..26c3deb3 100644
      }
  
 -    if (type == IBV_QPT_RAW_ETH) {
-+    if (type == IBV_QPT_RAW_PACKET) {
++    if (type == IBV_QPT_UD) {
          ibv_gid mgid;
          memset(&mgid, 0, sizeof(mgid));
          memcpy(&mgid.raw[10], localMac->address, 6);
