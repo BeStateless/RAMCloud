@@ -129,7 +129,7 @@ index 3fa2e4d3..1daa485e 100644
  
  /**
 diff --git a/src/Infiniband.cc b/src/Infiniband.cc
-index 93344f75..bc185e01 100644
+index 93344f75..3b853a2a 100644
 --- a/src/Infiniband.cc
 +++ b/src/Infiniband.cc
 @@ -13,6 +13,11 @@
@@ -179,7 +179,7 @@ index 93344f75..bc185e01 100644
 +    grh.flow_label = 9;
 +    grh.sgid_index = 1;
 +    ibv_gid gid;
-+    const int rc = ibv_query_gid(infiniband.device.ctxt, qpa.ah_attr.port_num, grh.sgid_index, gid);
++    const int rc = ibv_query_gid(infiniband.device.ctxt, qpa.ah_attr.port_num, grh.sgid_index, &gid);
 +    if (rc) {
 +      const char* errorstr2 = strerror(rc);
 +      LOG(ERROR, "failed to query GID index %d of port %d in device %s",
