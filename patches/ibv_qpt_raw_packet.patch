@@ -5,9 +5,9 @@ From: Daniel Noland <daniel@bestateless.com>
 
 ---
  src/HaveInfiniband.cc |    4 ++--
- src/InfUdDriver.cc    |   40 ++++++++++++++++++++++++----------------
- src/Infiniband.cc     |   44 ++++++++++++++++++++++++++++++++++----------
- 3 files changed, 60 insertions(+), 28 deletions(-)
+ src/InfUdDriver.cc    |   40 ++++++++++++++++++++++--------------
+ src/Infiniband.cc     |   54 +++++++++++++++++++++++++++++++++++++++----------
+ 3 files changed, 69 insertions(+), 29 deletions(-)
 
 diff --git a/src/HaveInfiniband.cc b/src/HaveInfiniband.cc
 index 502ba65b..b8c13f05 100644
@@ -129,7 +129,7 @@ index 3fa2e4d3..1daa485e 100644
  
  /**
 diff --git a/src/Infiniband.cc b/src/Infiniband.cc
-index 93344f75..eda62f8e 100644
+index 93344f75..fc71c00c 100644
 --- a/src/Infiniband.cc
 +++ b/src/Infiniband.cc
 @@ -13,6 +13,11 @@
@@ -162,7 +162,29 @@ index 93344f75..eda62f8e 100644
          break;
      default:
          assert(0);
-@@ -639,8 +644,11 @@ Infiniband::QueuePair::plumb(QueuePairTuple *qpt)
+@@ -626,12 +631,20 @@ Infiniband::QueuePair::plumb(QueuePairTuple *qpt)
+     qpa.rq_psn = qpt->getPsn();
+     qpa.max_dest_rd_atomic = 1;
+     qpa.min_rnr_timer = 12;
+-    qpa.ah_attr.is_global = 0;
++    qpa.ah_attr.is_global = 1;
+     qpa.ah_attr.dlid = qpt->getLid();
+     qpa.ah_attr.sl = 0;
+     qpa.ah_attr.src_path_bits = 0;
+     qpa.ah_attr.port_num = downCast<uint8_t>(ibPhysicalPort);
+ 
++    ibv_global_route grh;
++    memset(&grh, 0, sizeof(grh));
++    grh.hop_limit = 1;
++    grh.flow_label = 9;
++    grh.sgid_index = 1;
++
++    qpa.ah_attr.grh = grh;
++
+     r = ibv_modify_qp(qp, &qpa, IBV_QP_STATE |
+                                 IBV_QP_AV |
+                                 IBV_QP_PATH_MTU |
+@@ -639,8 +652,11 @@ Infiniband::QueuePair::plumb(QueuePairTuple *qpt)
                                  IBV_QP_RQ_PSN |
                                  IBV_QP_MIN_RNR_TIMER |
                                  IBV_QP_MAX_DEST_RD_ATOMIC);
@@ -175,7 +197,7 @@ index 93344f75..eda62f8e 100644
          throw TransportException(HERE, r);
      }
  
-@@ -683,7 +691,7 @@ void
+@@ -683,7 +699,7 @@ void
  Infiniband::QueuePair::activate(const Tub<MacAddress>& localMac)
  {
      ibv_qp_attr qpa;
@@ -184,7 +206,7 @@ index 93344f75..eda62f8e 100644
          throw TransportException(HERE, "activate() called on wrong qp type");
  
      if (getState() != IBV_QPS_INIT) {
-@@ -704,7 +712,7 @@ Infiniband::QueuePair::activate(const Tub<MacAddress>& localMac)
+@@ -704,7 +720,7 @@ Infiniband::QueuePair::activate(const Tub<MacAddress>& localMac)
      // now move to RTS state
      qpa.qp_state = IBV_QPS_RTS;
      int flags = IBV_QP_STATE;
@@ -193,7 +215,7 @@ index 93344f75..eda62f8e 100644
          qpa.sq_psn = initialPsn;
          flags |= IBV_QP_SQ_PSN;
      }
-@@ -714,13 +722,29 @@ Infiniband::QueuePair::activate(const Tub<MacAddress>& localMac)
+@@ -714,13 +730,29 @@ Infiniband::QueuePair::activate(const Tub<MacAddress>& localMac)
          throw TransportException(HERE, ret);
      }
  
