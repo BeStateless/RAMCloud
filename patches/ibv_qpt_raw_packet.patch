@@ -6,8 +6,8 @@ From: Daniel Noland <daniel@bestateless.com>
 ---
  src/HaveInfiniband.cc |    4 ++--
  src/InfUdDriver.cc    |   40 ++++++++++++++++++++++++----------------
- src/Infiniband.cc     |   33 ++++++++++++++++++++++++---------
- 3 files changed, 50 insertions(+), 27 deletions(-)
+ src/Infiniband.cc     |   39 ++++++++++++++++++++++++++++++---------
+ 3 files changed, 56 insertions(+), 27 deletions(-)
 
 diff --git a/src/HaveInfiniband.cc b/src/HaveInfiniband.cc
 index 502ba65b..b8c13f05 100644
@@ -129,20 +129,22 @@ index 3fa2e4d3..1daa485e 100644
  
  /**
 diff --git a/src/Infiniband.cc b/src/Infiniband.cc
-index 93344f75..d52398bb 100644
+index 93344f75..cf05f6a9 100644
 --- a/src/Infiniband.cc
 +++ b/src/Infiniband.cc
-@@ -13,6 +13,9 @@
+@@ -13,6 +13,11 @@
   * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
   */
  
 +#include <errno.h>
++#include <cstring>
++#include <string>
 +
 +
  #include "CycleCounter.h"
  #include "Infiniband.h"
  #include "RawMetrics.h"
-@@ -520,7 +523,7 @@ Infiniband::QueuePair::QueuePair(Infiniband& infiniband, ibv_qp_type type,
+@@ -520,7 +525,7 @@ Infiniband::QueuePair::QueuePair(Infiniband& infiniband, ibv_qp_type type,
        peerLid(0)
  {
      snprintf(peerName, sizeof(peerName), "?unknown?");
@@ -151,7 +153,7 @@ index 93344f75..d52398bb 100644
          throw TransportException(HERE, "invalid queue pair type");
  
      ibv_qp_init_attr qpia;
-@@ -564,7 +567,7 @@ Infiniband::QueuePair::QueuePair(Infiniband& infiniband, ibv_qp_type type,
+@@ -564,7 +569,7 @@ Infiniband::QueuePair::QueuePair(Infiniband& infiniband, ibv_qp_type type,
          mask |= IBV_QP_QKEY;
          mask |= IBV_QP_PKEY_INDEX;
          break;
@@ -160,7 +162,7 @@ index 93344f75..d52398bb 100644
          break;
      default:
          assert(0);
-@@ -683,7 +686,7 @@ void
+@@ -683,7 +688,7 @@ void
  Infiniband::QueuePair::activate(const Tub<MacAddress>& localMac)
  {
      ibv_qp_attr qpa;
@@ -169,7 +171,7 @@ index 93344f75..d52398bb 100644
          throw TransportException(HERE, "activate() called on wrong qp type");
  
      if (getState() != IBV_QPS_INIT) {
-@@ -704,7 +707,7 @@ Infiniband::QueuePair::activate(const Tub<MacAddress>& localMac)
+@@ -704,7 +709,7 @@ Infiniband::QueuePair::activate(const Tub<MacAddress>& localMac)
      // now move to RTS state
      qpa.qp_state = IBV_QPS_RTS;
      int flags = IBV_QP_STATE;
@@ -178,7 +180,7 @@ index 93344f75..d52398bb 100644
          qpa.sq_psn = initialPsn;
          flags |= IBV_QP_SQ_PSN;
      }
-@@ -714,13 +717,25 @@ Infiniband::QueuePair::activate(const Tub<MacAddress>& localMac)
+@@ -714,13 +719,29 @@ Infiniband::QueuePair::activate(const Tub<MacAddress>& localMac)
          throw TransportException(HERE, ret);
      }
  
@@ -197,7 +199,11 @@ index 93344f75..d52398bb 100644
 +          throw TransportException(HERE, gid_query_error_code);
 +        }
 +        LOG(ERROR, "gid_querry_error_code == %d", gid_query_error_code);
-+        LOG(ERROR, "mgid.raw == %s", mgid.raw);
++        std::string mgid_raw = "";
++        for (int i = 0; i < 16; ++i) {
++          mgid_raw += std::strtok(mgid.raw[i]);
++        }
++        LOG(ERROR, "mgid.raw == %s", mgid_raw.c_str());
 +        const int rval = ibv_attach_mcast(qp, &mgid, 0);
 +        if (rval != 0) {
 +            const char* errorstr = strerror(rval);
