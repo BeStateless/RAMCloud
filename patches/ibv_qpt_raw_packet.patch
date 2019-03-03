@@ -6,8 +6,8 @@ From: Daniel Noland <daniel@bestateless.com>
 ---
  src/HaveInfiniband.cc |    4 ++--
  src/InfUdDriver.cc    |   40 ++++++++++++++++++++++++----------------
- src/Infiniband.cc     |   34 +++++++++++++++++++++++++---------
- 3 files changed, 51 insertions(+), 27 deletions(-)
+ src/Infiniband.cc     |   33 ++++++++++++++++++++++++---------
+ 3 files changed, 50 insertions(+), 27 deletions(-)
 
 diff --git a/src/HaveInfiniband.cc b/src/HaveInfiniband.cc
 index 502ba65b..b8c13f05 100644
@@ -129,7 +129,7 @@ index 3fa2e4d3..1daa485e 100644
  
  /**
 diff --git a/src/Infiniband.cc b/src/Infiniband.cc
-index 93344f75..fe14903e 100644
+index 93344f75..d52398bb 100644
 --- a/src/Infiniband.cc
 +++ b/src/Infiniband.cc
 @@ -13,6 +13,9 @@
@@ -178,7 +178,7 @@ index 93344f75..fe14903e 100644
          qpa.sq_psn = initialPsn;
          flags |= IBV_QP_SQ_PSN;
      }
-@@ -714,13 +717,26 @@ Infiniband::QueuePair::activate(const Tub<MacAddress>& localMac)
+@@ -714,13 +717,25 @@ Infiniband::QueuePair::activate(const Tub<MacAddress>& localMac)
          throw TransportException(HERE, ret);
      }
  
@@ -197,8 +197,7 @@ index 93344f75..fe14903e 100644
 +          throw TransportException(HERE, gid_query_error_code);
 +        }
 +        LOG(ERROR, "gid_querry_error_code == %d", gid_query_error_code);
-+        const std::string mgid_raw(mgid.raw);
-+        LOG(ERROR, "mgid raw == %s", mgid_raw.c_str());
++        LOG(ERROR, "mgid.raw == %s", mgid.raw);
 +        const int rval = ibv_attach_mcast(qp, &mgid, 0);
 +        if (rval != 0) {
 +            const char* errorstr = strerror(rval);
