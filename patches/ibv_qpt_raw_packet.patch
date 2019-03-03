@@ -6,8 +6,8 @@ From: Daniel Noland <daniel@bestateless.com>
 ---
  src/HaveInfiniband.cc |    4 ++--
  src/InfUdDriver.cc    |   40 ++++++++++++++++++++++++----------------
- src/Infiniband.cc     |   19 +++++++++++++------
- 3 files changed, 39 insertions(+), 24 deletions(-)
+ src/Infiniband.cc     |   31 ++++++++++++++++++++++---------
+ 3 files changed, 48 insertions(+), 27 deletions(-)
 
 diff --git a/src/HaveInfiniband.cc b/src/HaveInfiniband.cc
 index 502ba65b..b8c13f05 100644
@@ -129,7 +129,7 @@ index 3fa2e4d3..1daa485e 100644
  
  /**
 diff --git a/src/Infiniband.cc b/src/Infiniband.cc
-index 93344f75..4d44d53a 100644
+index 93344f75..be599990 100644
 --- a/src/Infiniband.cc
 +++ b/src/Infiniband.cc
 @@ -13,6 +13,9 @@
@@ -178,22 +178,32 @@ index 93344f75..4d44d53a 100644
          qpa.sq_psn = initialPsn;
          flags |= IBV_QP_SQ_PSN;
      }
-@@ -714,12 +717,16 @@ Infiniband::QueuePair::activate(const Tub<MacAddress>& localMac)
+@@ -714,13 +717,23 @@ Infiniband::QueuePair::activate(const Tub<MacAddress>& localMac)
          throw TransportException(HERE, ret);
      }
  
 -    if (type == IBV_QPT_RAW_ETH) {
 +    if (type == IBV_QPT_UD) {
++        int const index = 0;
          ibv_gid mgid;
-         memset(&mgid, 0, sizeof(mgid));
-         memcpy(&mgid.raw[10], localMac->address, 6);
+-        memset(&mgid, 0, sizeof(mgid));
+-        memcpy(&mgid.raw[10], localMac->address, 6);
 -        if (ibv_attach_mcast(qp, &mgid, 0)) {
++        auto const gid_query_error_code = ibv_query_gid(ctxt, ibPhysicalPort, index, &mgid);
++        if (gid_query_error_code != 0) {
++          const char* gid_query_errorstr = strerror(gid_query_error_code);
++          LOG("ibv_query_gid failed with error code %d", gid_query_error_code);
++          LOG("ibv_query_gid failed with errorstr %s", gid_query_errorstr);
++          throw TransportException(HERE, gid_query_error_code);
++        }
 +        const int rval = ibv_attach_mcast(qp, &mgid, 0);
 +        if (rval != 0) {
 +            const char* errorstr = strerror(rval);
              LOG(ERROR, "failed to bind to mac address");
+-            throw TransportException(HERE, ret);
 +            LOG(ERROR, "ibv_attach_mcast failed with rval %d", rval);
 +            LOG(ERROR, "ibv_attach_mcast failed with errorstr %s", errorstr);
-             throw TransportException(HERE, ret);
++            throw TransportException(HERE, rval);
          }
      }
+ }
