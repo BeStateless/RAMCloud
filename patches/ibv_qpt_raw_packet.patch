@@ -129,7 +129,7 @@ index 3fa2e4d3..1daa485e 100644
  
  /**
 diff --git a/src/Infiniband.cc b/src/Infiniband.cc
-index 93344f75..0bd491a5 100644
+index 93344f75..cc595ec8 100644
 --- a/src/Infiniband.cc
 +++ b/src/Infiniband.cc
 @@ -13,6 +13,9 @@
@@ -197,7 +197,7 @@ index 93344f75..0bd491a5 100644
 +          throw TransportException(HERE, gid_query_error_code);
 +        }
 +        LOG(ERROR, "gid_querry_error_code == %d", gid_query_error_code);
-+        const char mgid_raw[16] = static_cast<char*> mgid.raw;
++        const std::string mgid_raw = static_cast<char*> mgid.raw;
 +        LOG(ERROR, "mgid raw == %s", mgid_raw);
 +        const int rval = ibv_attach_mcast(qp, &mgid, 0);
 +        if (rval != 0) {
