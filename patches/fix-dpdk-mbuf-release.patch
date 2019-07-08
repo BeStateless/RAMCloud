@@ -21,4 +21,4 @@ index 7f6bc040..a8ee1c52 100644
 +    payload - ETHER_VLAN_HDR_LEN - RTE_PKTMBUF_HEADROOM - sizeof(struct rte_mbuf))
  
  constexpr uint16_t DpdkDriver::PRIORITY_TO_PCP[8];
-
+ 
