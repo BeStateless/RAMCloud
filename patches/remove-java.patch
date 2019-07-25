@@ -8,10 +8,10 @@ From: Aaron Jones <aaron@vexing.codes>
  1 file changed, 2 insertions(+), 9 deletions(-)
 
 diff --git a/GNUmakefile b/GNUmakefile
-index 26d54640..6749dc12 100644
+index 482746e5..2a4a2f0d 100644
 --- a/GNUmakefile
 +++ b/GNUmakefile
-@@ -374,7 +374,7 @@ include bindings/python/Makefrag
+@@ -364,7 +364,7 @@ include bindings/python/Makefrag
  # test scripts, etc.) in the "private" subdirectory.
  include $(wildcard private/MakefragPrivate)
  
@@ -20,7 +20,7 @@ index 26d54640..6749dc12 100644
  	rm -rf $(OBJDIR)/.deps $(OBJDIR)/*
  
  check:
-@@ -430,12 +430,6 @@ INSTALL_LIBS := \
+@@ -420,12 +420,6 @@ INSTALL_LIBS := \
      $(OBJDIR)/libramcloud.a \
      $(NULL)
  
@@ -33,7 +33,7 @@ index 26d54640..6749dc12 100644
  # The header files below are those that must be installed in order to
  # compile RAMCloud applications. Please try to keep this list as short
  # as possible.
-@@ -500,14 +494,13 @@ INSTALL_INCLUDES := \
+@@ -490,14 +484,13 @@ INSTALL_INCLUDES := \
  INSTALLED_BINS := $(patsubst $(OBJDIR)/%, $(INSTALL_DIR)/bin/%, $(INSTALL_BINS))
  INSTALLED_LIBS := $(patsubst $(OBJDIR)/%, $(INSTALL_DIR)/lib/%, $(INSTALL_LIBS))
  

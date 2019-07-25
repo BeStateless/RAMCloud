@@ -1,4 +1,4 @@
-# This series applies on GIT commit 88288463f0e2563e7c0650032054d5952d193bb6
+# This series applies on GIT commit 998e826f73878ff775c14ea46d5686f447f88576
 disable-log-before-main.patch
 fix-dpdk-mbuf-release.patch
 dpdk-config.patch

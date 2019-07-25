@@ -25,18 +25,18 @@ to run sockets that are not socket zero.
  5 files changed, 133 insertions(+), 34 deletions(-)
 
 diff --git a/src/DpdkDriver.cc b/src/DpdkDriver.cc
-index a8ee1c52..a5408b0e 100644
+index 7aa51492..77c5808c 100644
 --- a/src/DpdkDriver.cc
 +++ b/src/DpdkDriver.cc
-@@ -97,6 +97,7 @@ DpdkDriver::DpdkDriver()
+@@ -89,6 +89,7 @@ DpdkDriver::DpdkDriver()
+     , loopbackRing(NULL)
+     , hasHardwareFilter(true)
      , bandwidthMbps(10000)
-     , highestPriorityAvail(7)
-     , lowestPriorityAvail(0)
 +    , vlanTag(0)
      , fileLogger(NOTICE, "DPDK: ")
  {
      localMac.construct("01:23:45:67:89:ab");
-@@ -121,7 +122,11 @@ DpdkDriver::DpdkDriver()
+@@ -113,7 +114,11 @@ DpdkDriver::DpdkDriver()
   *      Selects which physical port to use for communication.
   */
  
@@ -46,18 +46,18 @@ index a8ee1c52..a5408b0e 100644
 +                       std::string args,
 +                       bool skipInit,
 +                       uint16_t tag)
-     : context(context)
-     , packetBufPool()
+     : Driver(context)
      , packetBufsUtilized(0)
-@@ -136,6 +141,7 @@ DpdkDriver::DpdkDriver(Context* context, int port)
-     // Assume we are allowed to use all 8 ethernet priorities.
-     , highestPriorityAvail(7)
-     , lowestPriorityAvail(0)
+     , locatorString()
+@@ -123,6 +128,7 @@ DpdkDriver::DpdkDriver(Context* context, int port)
+     , loopbackRing(NULL)
+     , hasHardwareFilter(true)             // Cleared later if not applicable
+     , bandwidthMbps(10000)                // Default bandwidth = 10 gbs
 +    , vlanTag(tag)
      , fileLogger(NOTICE, "DPDK: ")
  {
      struct ether_addr mac;
-@@ -143,6 +149,12 @@ DpdkDriver::DpdkDriver(Context* context, int port)
+@@ -130,6 +136,12 @@ DpdkDriver::DpdkDriver(Context* context, int port)
      struct rte_eth_conf portConf;
      int ret;
  
@@ -70,7 +70,7 @@ index a8ee1c52..a5408b0e 100644
      portId = downCast<uint8_t>(port);
  
      // Initialize the DPDK environment with some default parameters.
-@@ -151,34 +163,43 @@ DpdkDriver::DpdkDriver(Context* context, int port)
+@@ -138,34 +150,43 @@ DpdkDriver::DpdkDriver(Context* context, int port)
      // This is a bug in DPDK as of 9/2016; if the bug gets fixed, then
      // the --file-prefix argument can be removed.
      LOG(NOTICE, "Using DPDK version %s", rte_version());
@@ -142,7 +142,7 @@ index a8ee1c52..a5408b0e 100644
      }
  
      // ensure that DPDK was able to detect a compatible and available NIC
-@@ -217,10 +238,29 @@ DpdkDriver::DpdkDriver(Context* context, int port)
+@@ -204,10 +225,29 @@ DpdkDriver::DpdkDriver(Context* context, int port)
            }
      }
  
@@ -174,7 +174,7 @@ index a8ee1c52..a5408b0e 100644
  
      // set the MTU that the NIC port should support
      ret = rte_eth_dev_set_mtu(portId, MAX_PAYLOAD_SIZE);
-@@ -528,7 +568,7 @@ DpdkDriver::sendPacket(const Address* addr,
+@@ -443,7 +483,7 @@ DpdkDriver::sendPacket(const Address* addr,
      // Fill out the PCP field and the Ethernet frame type of the encapsulated
      // frame (DEI and VLAN ID are not relevant and trivially set to 0).
      struct vlan_hdr* vlanHdr = reinterpret_cast<struct vlan_hdr*>(p);
@@ -184,7 +184,7 @@ index a8ee1c52..a5408b0e 100644
      p += VLAN_TAG_LEN;
  
 diff --git a/src/DpdkDriver.h b/src/DpdkDriver.h
-index ba6d2314..4b5935ca 100644
+index 2163723b..4f2b874c 100644
 --- a/src/DpdkDriver.h
 +++ b/src/DpdkDriver.h
 @@ -57,7 +57,11 @@ class DpdkDriver : public Driver
@@ -200,9 +200,9 @@ index ba6d2314..4b5935ca 100644
      virtual ~DpdkDriver();
      virtual int getHighestPacketPriority();
      virtual uint32_t getMaxPacketSize();
-@@ -176,6 +180,9 @@ class DpdkDriver : public Driver
-     /// be `highestPriorityAvail - lowestPriorityAvail + 1`.
-     int lowestPriorityAvail;
+@@ -135,6 +139,9 @@ class DpdkDriver : public Driver
+     /// Effective network bandwidth, in Mbits/second.
+     uint32_t bandwidthMbps;
  
 +    /// The VLAN tag to put into outgoing packets.
 +    uint16_t vlanTag;
@@ -211,10 +211,10 @@ index ba6d2314..4b5935ca 100644
      FileLogger fileLogger;
  
 diff --git a/src/OptionParser.cc b/src/OptionParser.cc
-index 1945cc64..7876a725 100644
+index 00af9254..dcaf9d48 100644
 --- a/src/OptionParser.cc
 +++ b/src/OptionParser.cc
-@@ -234,6 +234,21 @@ OptionParser::setup(int argc, char* argv[])
+@@ -237,6 +237,21 @@ OptionParser::setup(int argc, char* argv[])
                  default_value(-1),
               "Selects the Ethernet port that the DPDK driver should use, "
               "or -1 if DPDK should not be enabled.")
@@ -237,12 +237,12 @@ index 1945cc64..7876a725 100644
               ProgramOptions::value<int32_t>(&options.portTimeout)->
                  default_value(-1), // Overriding to the initial value.
 diff --git a/src/OptionParser.h b/src/OptionParser.h
-index d57a3f16..c9ef9759 100644
+index ce4a3713..dc2d21ac 100644
 --- a/src/OptionParser.h
 +++ b/src/OptionParser.h
-@@ -46,6 +46,9 @@ class CommandLineOptions {
-         , portTimeout(0)
+@@ -47,6 +47,9 @@ class CommandLineOptions {
          , clusterName()
+         , configDir()
          , dpdkPort(0)
 +        , dpdkArgs("")
 +        , dpdkSkipInit(false)
@@ -250,7 +250,7 @@ index d57a3f16..c9ef9759 100644
      {
      }
  
-@@ -118,6 +121,33 @@ class CommandLineOptions {
+@@ -128,6 +131,33 @@ class CommandLineOptions {
          return dpdkPort;
      }
  
@@ -284,9 +284,9 @@ index d57a3f16..c9ef9759 100644
      string coordinatorLocator;      ///< See getCoordinatorLocator().
      string localLocator;            ///< See getLocalLocator().
      string externalStorageLocator;  ///< See getExternalStorageLocator().
-@@ -126,6 +156,9 @@ class CommandLineOptions {
-     int32_t  portTimeout;           ///< See getSessionTimeout().
+@@ -137,6 +167,9 @@ class CommandLineOptions {
      string clusterName;             ///< See getClusterName().
+     string configDir;               ///< See getConfigDir().
      int dpdkPort;                   ///< See getDpdkPort().
 +    std::string dpdkArgs;           ///< See getDpdkArgs().
 +    bool dpdkSkipInit;              ///< See getDpdkSkipInit().
@@ -295,10 +295,10 @@ index d57a3f16..c9ef9759 100644
  
  /**
 diff --git a/src/TransportManager.cc b/src/TransportManager.cc
-index 59425165..ede7e501 100644
+index 819ef68d..94f732fc 100644
 --- a/src/TransportManager.cc
 +++ b/src/TransportManager.cc
-@@ -157,7 +157,11 @@ TransportManager::TransportManager(Context* context)
+@@ -216,7 +216,11 @@ TransportManager::TransportManager(Context* context)
      if (context->options != NULL) {
          int dpdkPort = context->options->getDpdkPort();
          if (dpdkPort >= 0) {
@@ -309,5 +309,5 @@ index 59425165..ede7e501 100644
 +                                        context->options->getDpdkSkipInit(),
 +                                        context->options->getDpdkVlanTag());
              basicDpdkTransportFactory.setDpdkDriver(dpdkDriver);
+             homaDpdkTransportFactory.setDpdkDriver(dpdkDriver);
          }
-     }

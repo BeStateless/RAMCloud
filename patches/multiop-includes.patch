@@ -10,10 +10,10 @@ programs.
  1 file changed, 5 insertions(+)
 
 diff --git a/GNUmakefile b/GNUmakefile
-index 7e9dedd6..26d54640 100644
+index 6952a3bb..482746e5 100644
 --- a/GNUmakefile
 +++ b/GNUmakefile
-@@ -458,6 +458,11 @@ INSTALL_INCLUDES := \
+@@ -448,6 +448,11 @@ INSTALL_INCLUDES := \
      src/LogMetadata.h \
      src/MasterClient.h \
      src/Minimal.h \
