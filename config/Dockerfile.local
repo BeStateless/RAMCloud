@@ -1,0 +1,16 @@
+# Copy the RAMCloud install files in the RAMCloud-install directory. This allows us to make containers from local
+# incremental builds rather than having to build RAMCloud from scratch each time. It should make the development cycle
+# substantially shorter.
+FROM debian:buster as RAMCloud-local
+RUN apt-get update \
+ && apt-get install --yes \
+      libboost-filesystem1.67.0 \
+      libboost-program-options1.67 \
+      libboost-system1.67.0 \
+      libibverbs1 \
+      libpcrecpp0v5 \
+      libprotobuf17 \
+      libssl1.1 \
+      libzookeeper-mt2 \
+ && rm -rf /var/lib/apt/lists/*
+COPY ./RAMCloud-install /usr/local

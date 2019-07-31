@@ -1,0 +1,100 @@
+version: '3.1'
+services:
+  zookeeper-1:
+    image: zookeeper
+    restart: always
+    hostname: zookeeper-1
+    ports:
+      - 2181:2181
+    environment:
+      ZOO_MY_ID: 1
+      ZOO_SERVERS: server.1=0.0.0.0:2888:3888;2181 server.2=zookeeper-2:2888:3888;2181 server.3=zookeeper-3:2888:3888;2181
+    networks:
+      ramcloud-test:
+        ipv4_address: 10.0.1.1
+  zookeeper-2:
+    image: zookeeper
+    restart: always
+    hostname: zookeeper-2
+    ports:
+      - 2182:2181
+    environment:
+      ZOO_MY_ID: 2
+      ZOO_SERVERS: server.1=zookeeper-1:2888:3888;2181 server.2=0.0.0.0:2888:3888;2181 server.3=zookeeper-3:2888:3888;2181
+    networks:
+      ramcloud-test:
+        ipv4_address: 10.0.1.2
+  zookeeper-3:
+    image: zookeeper
+    restart: always
+    hostname: zookeeper-3
+    ports:
+      - 2183:2181
+    environment:
+      ZOO_MY_ID: 3
+      ZOO_SERVERS: server.1=zookeeper-1:2888:3888;2181 server.2=zookeeper-2:2888:3888;2181 server.3=0.0.0.0:2888:3888;2181
+    networks:
+      ramcloud-test:
+        ipv4_address: 10.0.1.3
+  rc-coordinator-1:
+    build:
+      context: ../
+      dockerfile: "config/Dockerfile${RAMCLOUD_DOCKERFILE_EXTENSION:-.local}"
+    command: bash -c "sleep 10 && rc-coordinator --externalStorage zk:zookeeper-1:2181,zookeeper-2:2181,zookeeper-3:2181 --coordinator basic+udp:host=10.0.2.1,port=11111 --clusterName main"
+    networks:
+      ramcloud-test:
+        ipv4_address: 10.0.2.1
+  rc-coordinator-2:
+    build:
+      context: ../
+      dockerfile: "config/Dockerfile${RAMCLOUD_DOCKERFILE_EXTENSION:-.local}"
+    command: bash -c "sleep 10 && rc-coordinator --externalStorage zk:zookeeper-1:2181,zookeeper-2:2181,zookeeper-3:2181 --coordinator basic+udp:host=10.0.2.2,port=11111 --clusterName main"
+    networks:
+      ramcloud-test:
+        ipv4_address: 10.0.2.2
+  rc-coordinator-3:
+    build:
+      context: ../
+      dockerfile: "config/Dockerfile${RAMCLOUD_DOCKERFILE_EXTENSION:-.local}"
+    command: bash -c "sleep 10 && rc-coordinator --externalStorage zk:zookeeper-1:2181,zookeeper-2:2181,zookeeper-3:2181 --coordinator basic+udp:host=10.0.2.3,port=11111 --clusterName main"
+    networks:
+      ramcloud-test:
+        ipv4_address: 10.0.2.3
+  rc-server-1:
+    build:
+      context: ../
+      dockerfile: "config/Dockerfile${RAMCLOUD_DOCKERFILE_EXTENSION:-.local}"
+    command: bash -c "sleep 20 && rc-server --externalStorage zk:zookeeper-1:2181,zookeeper-2:2181,zookeeper-3:2181 --local basic+udp:host=10.0.3.1,port=11112 --clusterName main"
+    networks:
+      ramcloud-test:
+        ipv4_address: 10.0.3.1
+  rc-server-2:
+    build:
+      context: ../
+      dockerfile: "config/Dockerfile${RAMCLOUD_DOCKERFILE_EXTENSION:-.local}"
+    command: bash -c "sleep 20 && rc-server --externalStorage zk:zookeeper-1:2181,zookeeper-2:2181,zookeeper-3:2181 --local basic+udp:host=10.0.3.2,port=11112 --clusterName main"
+    networks:
+      ramcloud-test:
+        ipv4_address: 10.0.3.2
+  rc-server-3:
+    build:
+      context: ../
+      dockerfile: "config/Dockerfile${RAMCLOUD_DOCKERFILE_EXTENSION:-.local}"
+    command: bash -c "sleep 20 && rc-server --externalStorage zk:zookeeper-1:2181,zookeeper-2:2181,zookeeper-3:2181 --local basic+udp:host=10.0.3.3,port=11112 --clusterName main"
+    networks:
+      ramcloud-test:
+        ipv4_address: 10.0.3.3
+  rc-client-1:
+    build:
+      context: ../
+      dockerfile: "config/Dockerfile${RAMCLOUD_DOCKERFILE_EXTENSION:-.local}"
+    command: bash -c "sleep 30 && rc-client --externalStorage zk:zookeeper-1:2181,zookeeper-2:2181,zookeeper-3:2181 --clusterName main"
+    networks:
+      ramcloud-test:
+        ipv4_address: 10.0.4.1
+networks:
+  ramcloud-test:
+    ipam:
+      driver: default
+      config:
+        - subnet: 10.0.0.0/16

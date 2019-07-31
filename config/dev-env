@@ -1,0 +1,14 @@
+#!/bin/bash -e
+PROJECT_SRC="$(readlink -f "$(dirname "$0")/..")"
+cd "${PROJECT_SRC}"
+mkdir -p RAMCloud-install
+docker build . -f config/Dockerfile --target=dev -t ramcloud-dev-env
+docker run \
+  --interactive \
+  --tty \
+  --rm \
+  --volume "$(pwd):/src:rw" \
+  --volume "$(pwd)/RAMCloud-install:/tmp/RAMCloud-install" \
+  --workdir /src \
+  --hostname ramcloud-dev-env \
+  ramcloud-dev-env

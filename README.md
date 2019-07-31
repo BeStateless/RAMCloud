@@ -7,6 +7,76 @@ and the set of stateless-specific patches is very clear. This should make it
 easy to incorporate our changes upstream while pulling in new changes from
 upstream regularly.
 
+# General Workflow
+
+While the below sections discuss in detail all of the elements of this
+repository and how they work together, a simple overview of a general workflow
+one might use to develop changes against RAMCloud is presented first.
+
+Generally, if you want to change any RAMCloud code, you will need a development
+environment containing all of the dependencies required to build RAMCloud.
+First, you should fork the `BeStateless/RAMCloud` repository. Don't do your work
+out of the official repository, use your own fork. Once your fork has been
+created, create a local copy of it by cloning it from GitHub. After the source
+code has been retrieved, a docker-based development environment can be created
+using:
+
+    ./config/dev-env
+
+This will drop you into a bash shell in the development environment container.
+Then, inside the development environment, you will want to obtain the patched
+code by running:
+
+    ./patch
+
+That will place the patched RAMCloud source at `./RAMCloud` relative to the
+repository root. Once the patched code has been obtained, RAMCloud can be built
+with the following command run in the development environment shell:
+
+    ./config/make-ramcloud
+
+This will place all of the RAMCloud build artifacts at `./RAMCloud-install`.
+After RAMCloud has been built, a local cluster can be built using the commands
+from the repository root on your host machine, i.e. _not_ in the development
+environment container:
+
+    cd ./config
+    docker-compose up --build --detach
+
+This will build a `ramcloud-test` Docker image from the build artifacts at
+`./RAMCloud-install`, then spin up a three-node ZooKeeper ensemble, three
+RAMCloud coordinators, and three RAMCloud servers. Once that infrastructure has
+been spun up, a RAMCloud client container will be spawned that runs the
+`rc-client` binary to test the RAMCloud functionality. Presently this process
+relies on timed `sleep` commands to stage the bringup of the components
+correctly. We really should use docker-compose health checks to make sure each
+stage completes before moving on to the next one, but that is substantially more
+difficult to implement, so `sleep` works for now. The cluster takes about 30
+seconds to come up. Run the following to look at the RAMCloud client test
+program logs to see if it completed successfully (run this on your host, not in
+the development environment container):
+
+    docker logs config_rc-client-1_1
+
+The exit status of the RAMCloud client test can be seen using the command run
+from your host, not from the development environment container:
+
+    docker inspect --format '{{.State.ExitCode}}' config_rc-client-1_1
+
+If the exit status is `0` then the test completed successfully, otherwise a
+failure occurred.
+
+To take down the cluster run this command from the `./config` directory outside
+the development environment container:
+
+    docker-compose down --timeout 0
+
+To make changes to the RAMCloud code simply make changes to the code in the
+`./RAMCloud` directory on your host machine, and then run
+`./config/make-ramcloud` again on the the development environment bash shell.
+Once RAMCloud is rebuilt, you can run `docker-compose up --build --detach` on
+your host again to run the updated code.
+
 # Obtaining the Patched Code
 
 First, install `stgit` through your package manager, e.g. `apt-get install
@@ -34,3 +104,69 @@ into the patch, and finally use `stg export -d ../patches` from the inner
 reordering patches, rebasing onto newer upstream changes, and other operations
 are explained in the
 [stgit tutorial](http://procode.org/stgit/doc/tutorial.html).
+
+# Incremental Development
+
+To enter a development environment issue the following command from the
+repository root:
+
+    ./config/dev-env
+
+Once in the development environment the following commands can be run to patch
+the RAMCloud source and build RAMCloud
+
+    ./patch
+    ./config/make-ramcloud
+
+This will place the patched RAMCloud source in the `RAMCloud` directory in the
+repository root, and it will store the build artifacts in `RAMCloud-install`
+also in the repository root. Once the patched source is created, you can edit
+the files in the RAMCloud directory and rerun `./config/make-ramcloud` to
+perform an incremental build. If you need to make a clean build you can just
+delete the RAMCloud directory and the contents of the RAMCloud-install directory
+and run the above commands again to rebuild it.
+
+# Containers
+
+There are two dockerfiles, `./config/Dockerfile` and `./config/Dockerfile.local`
+that can be used to make a Docker image containing all of the `rc-coordinator`,
+`rc-server`, and `rc-client` binaries. The `./config/Dockerfile` builds the
+binaries from source. The `./config/Dockerfile.local` assumes the `dev-env` has
+been used to build RAMCloud already and that the RAMCloud build artifacts are in
+`./RAMCloud-install`. The `./config/Dockerfile.local` is designed to be very
+fast at making updated containers. The `./config/Dockerfile` is designed to be
+more like an "official" build and builds RAMCloud from source patched using the
+patch series in the repository. That build is much slower, but doesn't require
+manual building within a dev-env.
+
+The script `./config/make-container` is a wrapper around both of the docker
+files. You can use `./config/make-container` to make the full build. You can use
+`./config/make-container --local` to make the quick build assuming you've
+already run `./config/make-ramcloud` in the `dev-env`.
+
+# Docker Compose
+
+There is a docker-compose file at `./config/docker-compose.yml` that is
+configured to set up a three-node ZooKeeper ensemble, launch three RAMCloud
+Coordinator instances, launch three RAMCloud server instances, and then launch
+the RAMCloud client test binary to make sure that the RAMCloud server is
+functional.
+
+The environment variable `RAMCLOUD_DOCKERFILE_EXTENSION` controls whether or not
+the `ramcloud-test` image is built from the `Dockerfile` or `Dockerfile.local`
+as described above. The default is to build from `Dockerfile.local`. You can do
+`export RAMCLOUD_DOCKERFILE_EXTENSION=` to use the long build.
+
+Use `docker-compose build` to build the necessary containers. Use
+`docker-compose up` to launch the testing environment synchronously. Use
+`docker-compose up --detach` to launch the testing environment in the
+background. Finally, you can use `docker-compose up --detach --build` to build
+_and_ launch the testing environment in the background in one command.
+
+# Looking at ZooKeeper Contents
+
+It is easy to use the ZooKeeper CLI to look at the contents of ZooKeeper, which
+is used by RAMCloud to store persistent configuration information. Simply run
+the command
+
+    docker run -it --rm --net config_ramcloud-test zookeeper zkCli.sh -server zookeeper-1
