@@ -1,0 +1,13 @@
+#/bin/bash -ex
+
+cd "/src/RAMCloud"
+rm -rf "${INSTALL_DIR}"/*
+make -j$(nproc) install DEBUG=no GLIBCXX_USE_CXX11_ABI=yes EXTRACXXFLAGS='-Wno-error'
+
+# Rename the binaries to something a little more descriptive.
+mv "${INSTALL_DIR}/bin/coordinator" "${INSTALL_DIR}/bin/rc-coordinator"
+mv "${INSTALL_DIR}/bin/client"      "${INSTALL_DIR}/bin/rc-client"
+mv "${INSTALL_DIR}/bin/server"      "${INSTALL_DIR}/bin/rc-server"
+
+# Move the libraries to the correct place instead of in the ramcloud subdirectory.
+mv ${INSTALL_DIR}/lib/ramcloud/* ${INSTALL_DIR}/lib && rmdir ${INSTALL_DIR}/lib/ramcloud

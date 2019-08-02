@@ -1,0 +1,27 @@
+#!/bin/bash -e
+
+PROJECT_SRC="$(readlink -f "$(dirname "$0")/..")"
+cd "${PROJECT_SRC}"
+
+LOCAL=false
+while [[ ${#} -gt 0 ]]; do
+  KEY="${1}"
+  case ${KEY} in
+    --local)
+      LOCAL=true
+      shift
+      ;;
+    *)
+      echo "Unrecognized option: ${KEY}"
+      exit 1
+      ;;
+  esac
+done
+
+if [[ "${LOCAL}" == true ]]; then
+  DOCKERFILE="Dockerfile.local"
+else
+  DOCKERFILE="Dockerfile"
+fi
+
+docker build . -f "config/${DOCKERFILE}" --tag ramcloud-test
