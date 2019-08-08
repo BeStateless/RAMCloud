@@ -1,0 +1,34 @@
+Modifies RAMCloud MakefragTest so that unit tests can be ran. (There is still flakiness to debug)
+
+From: Ofer Gill <ofer.gill@stateless.net>
+
+
+---
+ src/MakefragTest |    8 ++++++--
+ 1 file changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/src/MakefragTest b/src/MakefragTest
+index 69c0e1cf..36926242 100644
+--- a/src/MakefragTest
++++ b/src/MakefragTest
+@@ -273,14 +273,18 @@ else
+ GLIBCXX_ABI := -D_GLIBCXX_USE_CXX11_ABI=0
+ endif
+ 
++# Directory for installation: various subdirectories such as include and
++# bin will be created by "make install".
++INSTALL_DIR ?= install
++
+ # The following target tries to compile a simple RAMCloud client app using
+ # only installed files, in order to ensure that "make install" has pulled
+ # together all the information needed by client apps. Note: this target
+ # does *not* use the normal compilation flags, since we only want installed
+ # info to be available.
+ testInstall: install
+-	$(CXX) --std=$(CXX_STANDARD) $(GLIBCXX_ABI) -g -DNDEBUG -Iinstall/include -I. \
+-	        src/TestClient.cc -o $(OBJDIR)/TestClient -Linstall/lib/ramcloud/ \
++	$(CXX) --std=$(CXX_STANDARD) $(GLIBCXX_ABI) -g -DTESTING=1 -fno-builtin -I$(INSTALL_DIR)/include -I. \
++	        src/TestClient.cc -o $(OBJDIR)/TestClient -L$(INSTALL_DIR)/lib/ramcloud/ \
+ 	        -lramcloud -Wl,-rpath=install/bin $(TEST_INSTALL_FLAGS)
+ 
+ TESTS_ONLY_OBJFILES := $(TESTS_SRCFILES)

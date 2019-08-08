@@ -1,0 +1,4 @@
+#/bin/bash -ex
+
+cd "/src/RAMCloud"
+make -j$(nproc) test DEBUG=yes GLIBCXX_USE_CXX11_ABI=yes EXTRACXXFLAGS='-Wno-error'
