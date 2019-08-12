@@ -4,6 +4,7 @@ RUN apt-get update \
  && apt-get install --yes \
       build-essential \
       g++ \
+      gdb \
       git \
       libboost-dev \
       libboost-filesystem-dev \

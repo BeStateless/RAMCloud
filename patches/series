@@ -4,3 +4,4 @@ fix-dpdk-mbuf-release.patch
 dpdk-config.patch
 multiop-includes.patch
 remove-java.patch
+make-rc-unit-test.patch

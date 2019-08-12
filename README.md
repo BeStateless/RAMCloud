@@ -36,9 +36,15 @@ with the following command run in the development environment shell:
     ./config/make-ramcloud
 
 This will place all of the RAMCloud build artifacts at `./RAMCloud-install`.
-After RAMCloud has been built, a local cluster can be built using the commands
-from the repository root on your host machine, i.e. _not_ in the development
-environment container:
+
+(Optional) One other thing you can do within this development environment shell 
+is run the unit tests for RAMCloud. You can do this with:
+
+    ./config/make-ramcloud-test
+
+After RAMCloud has been built (via make-ramcloud), a local cluster can be built
+using the commands from the repository root on your host machine, i.e. _not_ in
+the development environment container:
 
     cd ./config
     docker-compose up --build --detach
@@ -125,6 +131,13 @@ the files in the RAMCloud directory and rerun `./config/make-ramcloud` to
 perform an incremental build. If you need to make a clean build you can just
 delete the RAMCloud directory and the contents of the RAMCloud-install directory
 and run the above commands again to rebuild it.
+
+# Debugging
+
+On your host machine (i.e., not the development environment container), it will
+help to modify the kernel.core_pattern in your /etc/sysctl.conf file. See 
+`http://man7.org/linux/man-pages/man5/core.5.html` for more information on how 
+the different values work, and the `%` placeholders.
 
 # Containers
 
