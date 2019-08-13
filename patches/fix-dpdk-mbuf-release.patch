@@ -6,11 +6,11 @@ The payload_to_mbuf macro in DpdkDriver.cc is off by four because it fails to
 account for the VLAN tag in the ethernet header. The error results in undefined
 behvior when freeing DPDK buffers.
 ---
- src/DpdkDriver.cc |    2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ src/DpdkDriver.cc |    6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
 
 diff --git a/src/DpdkDriver.cc b/src/DpdkDriver.cc
-index 39fec055..7aa51492 100644
+index 39fec055..af56e8e5 100644
 --- a/src/DpdkDriver.cc
 +++ b/src/DpdkDriver.cc
 @@ -71,7 +71,7 @@ namespace {
@@ -22,3 +22,14 @@ index 39fec055..7aa51492 100644
  
  constexpr uint16_t DpdkDriver::PRIORITY_TO_PCP[8];
  
+@@ -351,8 +351,8 @@ DpdkDriver::receivePackets(uint32_t maxPackets,
+     for (uint32_t i = 0; i < totalPkts; i++) {
+         struct rte_mbuf* m = mPkts[i];
+         char* data = rte_pktmbuf_mtod(m, char*);
+-        char* payload = data + ETHER_HDR_LEN;
+-        uint32_t length = rte_pktmbuf_pkt_len(m) - ETHER_HDR_LEN;
++        char* payload = data + ETHER_VLAN_HDR_LEN;
++        uint32_t length = rte_pktmbuf_pkt_len(m) - ETHER_VLAN_HDR_LEN;
+         struct ether_hdr* ethHdr = rte_pktmbuf_mtod(m, struct ether_hdr*);
+         assert(ethHdr->ether_type == rte_cpu_to_be_16(
+                 NetUtil::EthPayloadType::RAMCLOUD));

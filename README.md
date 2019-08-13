@@ -114,6 +114,19 @@ reordering patches, rebasing onto newer upstream changes, and other operations
 are explained in the
 [stgit tutorial](http://procode.org/stgit/doc/tutorial.html).
 
+# Updating Existing Patches
+
+If you want to change an existing patch, first retreive the fully patched code.
+After you have the code, from the _inner_ `RAMCloud` directory you can use the
+command `stg series` to show all patches in the series. Find the patch you want
+to edit and use the command `stg goto ${patch}` where `${patch}` is the name of
+the patch to be edited. From there, edit the code as needed. Once all edits are
+made, use `stg refresh` to add the working changes to the patch. Once the patch
+is updated, go back to the last patch in the series using the command
+`stg goto $(stg series | tail -1 | cut -c2-)` (there may be an easier command to
+do that, but this one works). Finally, once you are back at the top of the stack
+of patches, you can use `stg export -d ../` to export the updated patch.
+
 # Incremental Development
 
 To enter a development environment issue the following command from the
