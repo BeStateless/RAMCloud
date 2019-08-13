@@ -1,0 +1,61 @@
+Fixes some flaky tests
+
+From: Ofer Gill <ofer.gill@stateless.net>
+
+
+---
+ src/LogTest.cc        |    2 +-
+ src/PortAlarmTest.cc  |    5 +++--
+ src/StringUtilTest.cc |    2 +-
+ 3 files changed, 5 insertions(+), 4 deletions(-)
+
+diff --git a/src/LogTest.cc b/src/LogTest.cc
+index a5c172b9..325aeedd 100644
+--- a/src/LogTest.cc
++++ b/src/LogTest.cc
+@@ -162,8 +162,8 @@ TEST_F(LogTest, destructor) {
+     Tub<Log> l2;
+     l2.construct(&context, &serverConfig, &entryHandlers,
+            &segmentManager2, &replicaManager);
+-    l2->enableCleaner();
+     TestLog::Enable _;
++    l2->enableCleaner();
+     l2.destroy();
+     EXPECT_EQ("cleanerThreadEntry: LogCleaner thread started | "
+               "cleanerThreadEntry: LogCleaner thread stopping | "
+diff --git a/src/PortAlarmTest.cc b/src/PortAlarmTest.cc
+index 68785906..e9c18827 100644
+--- a/src/PortAlarmTest.cc
++++ b/src/PortAlarmTest.cc
+@@ -33,6 +33,7 @@ class PortAlarmTest : public ::testing::Test {
+     ~PortAlarmTest()
+     {
+         Cycles::mockTscValue = 0;
++        //timer.setPortTimeout(-1);
+     }
+ 
+   private:
+@@ -286,8 +287,8 @@ TEST_F(PortAlarmTest, restart_portTimer) {
+         context.dispatch->poll();
+     }
+ 
+-    EXPECT_TRUE(port1); // watchdog timeout should not occur
+-    EXPECT_TRUE(port2); // watchdog timeout should not occur
++    ASSERT_TRUE(port1); // watchdog timeout should not occur
++    ASSERT_TRUE(port2); // watchdog timeout should not occur
+     // waitingForRequestsMs is incremented every 5ms
+     EXPECT_EQ(port1->alarm.idleMs, 10);
+     EXPECT_EQ(port2->alarm.idleMs, 10);
+diff --git a/src/StringUtilTest.cc b/src/StringUtilTest.cc
+index 474c56cc..0f6831e9 100644
+--- a/src/StringUtilTest.cc
++++ b/src/StringUtilTest.cc
+@@ -47,7 +47,7 @@ TEST(StringUtilTest, contains) {
+ TEST(StringUtilTest, regsub) {
+     EXPECT_EQ("0 yyy zzz 0 0 0 qqq",
+             regsub("xxx yyy zzz xxx xxx xxx qqq", "[x]+", "0"));
+-    EXPECT_EQ("Unmatched [ or [^",
++    EXPECT_EQ("Unmatched [, [^, [:, [., or [=",
+             regsub("xxx yyy zzz xxx xxx xxx qqq", "[xyz", "0"));
+     EXPECT_EQ("no match here",
+             regsub("no match here", "xyzzy", "0"));

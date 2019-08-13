@@ -5,3 +5,4 @@ dpdk-config.patch
 multiop-includes.patch
 remove-java.patch
 make-rc-unit-test.patch
+flaky-test_fix.patch
