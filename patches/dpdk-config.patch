@@ -25,7 +25,7 @@ to run sockets that are not socket zero.
  5 files changed, 133 insertions(+), 34 deletions(-)
 
 diff --git a/src/DpdkDriver.cc b/src/DpdkDriver.cc
-index 7aa51492..77c5808c 100644
+index af56e8e5..3f5e9719 100644
 --- a/src/DpdkDriver.cc
 +++ b/src/DpdkDriver.cc
 @@ -89,6 +89,7 @@ DpdkDriver::DpdkDriver()
