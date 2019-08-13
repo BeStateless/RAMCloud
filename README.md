@@ -42,6 +42,9 @@ is run the unit tests for RAMCloud. You can do this with:
 
     ./config/make-ramcloud-test
 
+As outlined in the `Known Unit Test Issues` section, there are some known 
+issues with the unit tests.
+
 After RAMCloud has been built (via make-ramcloud), a local cluster can be built
 using the commands from the repository root on your host machine, i.e. _not_ in
 the development environment container:
@@ -183,3 +186,34 @@ is used by RAMCloud to store persistent configuration information. Simply run
 the command
 
     docker run -it --rm --net config_ramcloud-test zookeeper zkCli.sh -server zookeeper-1
+
+# Known Unit Test Issues
+
+The unit tests pass for 90% of the time it is ran, but has failures, segfaults,
+or freezes for the other 10%. None of the freezes have been replicated in gdb,
+but the failures and segfaults have been.
+
+The most common segfaults are (1) in MultiFileStorage.cc:784 trying to read
+from a specific file on disk, with the file set up in a manner different than
+on prod, and (2) in UdpDriver.cc:357 making a recieve messages socket call
+using a mock Syscall object, also different from prod behavior.
+
+Other less frequent segfaults include: WorkerTimer.cc:379, ServerRpcPool.h:55, 
+and ServerIdRpcWrapper.cc:180.
+
+The most common test failure is at PortAlarmTest.cc:292. This line used to 
+crash, but using an assert on the null-check prevents the pointer from being
+used once it's determined that it's null. Fixing the cause behind the problem
+is less intuitive. It involves modifying PortAlarmTest's static member variables
+and/or AlartmentPort to reset properly once PortAlarmTest is completely reset.
+This class's tests pass on the first run for all unit tests for RAMCloud, but
+fail on subsequent runs precisely for this reason.
+
+Other less frequent observed test failures include: 
+WorkerTimerTest.stopInternal_handlerDoesntFinishQuickly, 
+WorkerTimerTest.start_startDispatchTimer,
+WorkerTimerTest.sync, 
+SegmentManagerTest.freeUnreferencedSegments_blockByWorkerTimer, 
+PortAlarmTest.triple_alarm, 
+LoggerTest.logMessage_discardEntriesBecauseOfOverflow, 
+UdpDriverTest.readerThreadMain_errorInRecvmmsg.
