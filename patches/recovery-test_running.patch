@@ -1,0 +1,22 @@
+Modifies recoverytest.py and family so that the RAMCloud recovery tests can get ran.
+
+From: Ofer Gill <ofer.gill@stateless.net>
+
+
+---
+ systemtests/ramcloudtest.py |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/systemtests/ramcloudtest.py b/systemtests/ramcloudtest.py
+index a0675a0c..4baf326d 100644
+--- a/systemtests/ramcloudtest.py
++++ b/systemtests/ramcloudtest.py
+@@ -84,7 +84,7 @@ class ContextManagerTestCase(unittest.TestCase):
+             except self.failureException:
+                 result.addFailure(self, self._exc_info())
+             except:
+-                result.addError(self, self._exc_info())
++                result.addError(self, sys.exc_info())
+                 return
+             if ok: result.addSuccess(self)
+         finally:

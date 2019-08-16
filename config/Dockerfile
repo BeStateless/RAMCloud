@@ -15,8 +15,10 @@ RUN apt-get update \
       libssl-dev \
       libzookeeper-mt-dev \
       protobuf-compiler \
+      python-pip \
       stgit \
- && rm -rf /var/lib/apt/lists/*
+ && rm -rf /var/lib/apt/lists/* \
+ && pip install pipenv 
 ENV INSTALL_DIR=/tmp/RAMCloud-install
 
 # Build RAMCloud from the patched source code.
