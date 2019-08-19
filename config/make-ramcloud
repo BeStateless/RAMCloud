@@ -1,8 +1,41 @@
-#/bin/bash -ex
+#!/bin/bash -e
+# Build the primary RAMCloud binaries.
 
+# Command-line Defaults.
+DEBUG=no
+DEBUG_OPT=no
+
+# Parse command line.
+while [[ ${#} -gt 0 ]]; do
+  KEY="${1}"
+  case ${KEY} in
+    --help)
+      echo "Usage: ${0} [--debug] [--debug-opt]"
+      echo
+      echo "  --debug     -- Enable DEBUG=yes on the build. Required for unit tests."
+      echo "  --debug-opt -- Disable optimizations (-O0) on debug builds."
+      exit 0
+      ;;
+    --debug)
+      DEBUG=yes
+      shift 1
+      ;;
+    --debug-opt)
+      DEBUG_OPT=yes
+      shift 1
+      ;;
+    *)
+      echo "Unrecognized option: ${KEY}"
+      exit 1
+      ;;
+  esac
+done
+
+# Build RAMCloud.
+set -x
 cd "/src/RAMCloud"
 rm -rf "${INSTALL_DIR}"/*
-make -j$(nproc) install DEBUG=no GLIBCXX_USE_CXX11_ABI=yes EXTRACXXFLAGS='-Wno-error'
+make -j$(nproc) install DEBUG=${DEBUG} DEBUG_OPT=${DEBUG_OPT} GLIBCXX_USE_CXX11_ABI=yes EXTRACXXFLAGS='-Wno-error'
 
 # Rename the binaries to something a little more descriptive.
 mv "${INSTALL_DIR}/bin/coordinator" "${INSTALL_DIR}/bin/rc-coordinator"
