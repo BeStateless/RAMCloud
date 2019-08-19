@@ -37,12 +37,15 @@ with the following command run in the development environment shell:
 
 This will place all of the RAMCloud build artifacts at `./RAMCloud-install`.
 
-(Optional) One other thing you can do within this development environment shell 
-is run the unit tests for RAMCloud. You can do this with:
+(Optional) One other thing you can do within this development environment shell
+is run the unit tests for RAMCloud. Note, in order to run the unit tests, you
+must pass the `--debug` option when you compile RAMCloud with the
+`./config/make-ramcloud` script. Once RAMCloud is built with `DEBUG=yes`, the
+unit tests can be run with with:
 
     ./config/make-ramcloud-test
 
-As outlined in the `Known Unit Test Issues` section, there are some known 
+As outlined in the `Known Unit Test Issues` section, there are some known
 issues with the unit tests.
 
 After RAMCloud has been built (via make-ramcloud), a local cluster can be built
@@ -151,8 +154,8 @@ and run the above commands again to rebuild it.
 # Debugging
 
 On your host machine (i.e., not the development environment container), it will
-help to modify the kernel.core_pattern in your /etc/sysctl.conf file. See 
-`http://man7.org/linux/man-pages/man5/core.5.html` for more information on how 
+help to modify the kernel.core_pattern in your /etc/sysctl.conf file. See
+`http://man7.org/linux/man-pages/man5/core.5.html` for more information on how
 the different values work, and the `%` placeholders.
 
 # Containers
@@ -211,10 +214,10 @@ from a specific file on disk, with the file set up in a manner different than
 on prod, and (2) in UdpDriver.cc:357 making a recieve messages socket call
 using a mock Syscall object, also different from prod behavior.
 
-Other less frequent segfaults include: WorkerTimer.cc:379, ServerRpcPool.h:55, 
+Other less frequent segfaults include: WorkerTimer.cc:379, ServerRpcPool.h:55,
 and ServerIdRpcWrapper.cc:180.
 
-The most common test failure is at PortAlarmTest.cc:292. This line used to 
+The most common test failure is at PortAlarmTest.cc:292. This line used to
 crash, but using an assert on the null-check prevents the pointer from being
 used once it's determined that it's null. Fixing the cause behind the problem
 is less intuitive. It involves modifying PortAlarmTest's static member variables
@@ -222,11 +225,11 @@ and/or AlartmentPort to reset properly once PortAlarmTest is completely reset.
 This class's tests pass on the first run for all unit tests for RAMCloud, but
 fail on subsequent runs precisely for this reason.
 
-Other less frequent observed test failures include: 
-WorkerTimerTest.stopInternal_handlerDoesntFinishQuickly, 
+Other less frequent observed test failures include:
+WorkerTimerTest.stopInternal_handlerDoesntFinishQuickly,
 WorkerTimerTest.start_startDispatchTimer,
-WorkerTimerTest.sync, 
-SegmentManagerTest.freeUnreferencedSegments_blockByWorkerTimer, 
-PortAlarmTest.triple_alarm, 
-LoggerTest.logMessage_discardEntriesBecauseOfOverflow, 
+WorkerTimerTest.sync,
+SegmentManagerTest.freeUnreferencedSegments_blockByWorkerTimer,
+PortAlarmTest.triple_alarm,
+LoggerTest.logMessage_discardEntriesBecauseOfOverflow,
 UdpDriverTest.readerThreadMain_errorInRecvmmsg.
