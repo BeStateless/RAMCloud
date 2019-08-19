@@ -1,0 +1,5 @@
+#!/bin/bash -ex
+
+cd "/src"
+pipenv install
+pipenv run python -m unittest discover -s testing -v

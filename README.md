@@ -38,12 +38,16 @@ with the following command run in the development environment shell:
 This will place all of the RAMCloud build artifacts at `./RAMCloud-install`.
 
 (Optional) One other thing you can do within this development environment shell
-is run the unit tests for RAMCloud. Note, in order to run the unit tests, you
-must pass the `--debug` option when you compile RAMCloud with the
+is run the container and unit tests for RAMCloud. Note, in order to do that, 
+you must pass the `--debug` option when you compile RAMCloud with the
 `./config/make-ramcloud` script. Once RAMCloud is built with `DEBUG=yes`, the
-unit tests can be run with with:
+container tests can be ran with:
 
-    ./config/make-ramcloud-test
+    ./config/make-ramcloud-container-test
+
+And the unit tests can be ran with:
+
+    ./config/make-ramcloud-unit-test
 
 As outlined in the `Known Unit Test Issues` section, there are some known
 issues with the unit tests.

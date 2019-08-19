@@ -1,3 +1,5 @@
 RAMCloud
 RAMCloud-install
 .vscode
+__pycache__/
+*.py[cod]
