@@ -1,14 +1,18 @@
-#!/bin/bash -e
-PROJECT_SRC="$(readlink -f "$(dirname "$0")/..")"
+#!/bin/bash -eux
+# Builds the RAMCloud development environment container and launches a BASH shell in it to run commands.
+
+PROJECT_SRC="$(readlink --canonicalize "$(dirname "$0")/..")"
 cd "${PROJECT_SRC}"
-mkdir -p RAMCloud-install
-docker build . -f config/Dockerfile --target=dev -t ramcloud-dev-env
+docker build . --file config/Dockerfile.dev --tag ramcloud-dev-env
 docker run \
   --interactive \
   --tty \
   --rm \
   --volume "$(pwd):/src:rw" \
-  --volume "$(pwd)/RAMCloud-install:/tmp/RAMCloud-install" \
+  --volume "/var/run/docker.sock:/var/run/docker.sock" \
   --workdir /src \
   --hostname ramcloud-dev-env \
+  --privileged \
+  --net host \
+  --pid host \
   ramcloud-dev-env

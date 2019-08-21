@@ -1,0 +1,4 @@
+#!/bin/bash -ex
+
+cd "/src"
+python -m unittest discover -s testing -v
