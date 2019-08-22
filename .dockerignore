@@ -1,3 +1,2 @@
 RAMCloud
-config
-!config/make-ramcloud
+!RAMCloud/install

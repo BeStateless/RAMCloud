@@ -1,0 +1,40 @@
+# Install the dependencies required to build RAMCloud and run the RAMCloud tests. This is used as the development
+# environment.
+FROM debian:buster
+WORKDIR /src
+COPY config/Pipfile config/Pipfile.lock /src/
+RUN apt-get update \
+ && apt-get install --yes \
+      apt-transport-https \
+      build-essential \
+      ca-certificates \
+      curl \
+      g++ \
+      gdb \
+      git \
+      libboost-dev \
+      libboost-filesystem-dev \
+      libboost-program-options-dev \
+      libboost-system-dev \
+      libibverbs-dev \
+      libpcre++-dev \
+      libssl-dev \
+      libzookeeper-mt-dev \
+      protobuf-compiler \
+      python-pip \
+      # Install this python package to work around https://github.com/docker/docker-py/issues/1502
+      python-backports.ssl-match-hostname \
+      software-properties-common \
+      stgit \
+ && rm -rf /var/lib/apt/lists/* \
+ && pip install pipenv \
+ && pipenv install --system \
+ && rm Pipfile* \
+ && curl -fsSL https://download.docker.com/linux/debian/gpg | apt-key add - \
+ && add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/debian buster stable" \
+ && apt-get update \
+ && apt-get install --yes \
+      docker-ce \
+ && rm -rf /var/lib/apt/lists/*
+ENV PYTHONPATH=/src/RAMCloud/scripts:/src/RAMCloud/bindings/python
+ENV LD_LIBRARY_PATH=/src/RAMCloud/install/lib
