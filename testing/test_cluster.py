@@ -4,6 +4,7 @@ import logging.config
 import ramcloud
 import time
 import unittest
+from pyexpect import expect
 
 logging.config.fileConfig('/src/testing/log.ini')
 logger = logging.getLogger('cluster')
@@ -139,8 +140,8 @@ class TestCluster(unittest.TestCase):
         table = rc_client.get_table_id('test_table')
         rc_client.create(table, 0, 'Hello, World!')
         value, version = rc_client.read(table, 0)
-        if value != 'Hello, World!':
-            raise Exception('Error reading value. Got {}'.format(value))
+
+        expect(value).equals('Hello, World!')
 
 if __name__ == '__main__':
     unittest.main()
