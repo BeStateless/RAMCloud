@@ -53,11 +53,6 @@ been spun up, the python RAMCloud client is used to connect to the running
 RAMCloud cluster, create a RAMCloud table, write a value to the table, read that
 value back, and validate that it has the correct value.
 
-To take down everything built by the integration tests, run the following
-command (eventually the integration tests should perform their own teardown):
-
-    docker rm -f zookeeper-1 zookeeper-3 zookeeper-2 rc-coordinator-1 rc-coordinator-2 rc-coordinator-3 rc-server-1 rc-server-2 rc-server-3; docker network rm ramcloud-net
-
 To make changes to the RAMCloud code simply make changes to the code in the
 `./RAMCloud` directory on your host machine, and then run
 `./config/make-ramcloud` again on the the development environment bash shell.
