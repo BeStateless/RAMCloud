@@ -12,6 +12,9 @@ docker_api = docker.APIClient(base_url='unix://var/run/docker.sock')
 def external_storage_string(ensemble):
     return 'zk:' + ','.join(['{}:2181'.format(ip) for (_, ip) in ensemble.items()])
 
+def ensemble_servers_string(ensemble):
+    return ' '.join(['server.{}={}:2888:3888;2181'.format(zkid, ip) for (zkid, ip) in ensemble.items()])
+
 def get_node_image():
     logger.info('Building ramcloud-test-node image...')
     node_image = docker_client.images.build(path='/src',
@@ -28,11 +31,11 @@ def make_docker_network(name, subnet):
     logger.info('Creating docker network %s on subnet %s...succeeded', name, subnet)
     return network
 
-def launch_node(cluster_name, hostname, ensemble, zkid, ip, image, network):
+def launch_node(cluster_name, hostname, zk_servers, external_storage, zkid, ip, image, network):
     environment = {
         'ZOO_MY_ID': zkid,
-        'ZOO_SERVERS': ' '.join(['server.{}={}:2888:3888;2181'.format(zkid, ip2) for (zkid, ip2) in ensemble.items()]),
-        'RC_EXTERNAL_STORAGE': external_storage_string(ensemble),
+        'ZOO_SERVERS': zk_servers,
+        'RC_EXTERNAL_STORAGE': external_storage,
         'RC_CLUSTER_NAME': cluster_name,
         'RC_IP': ip
     }

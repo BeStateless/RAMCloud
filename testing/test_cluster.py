@@ -18,17 +18,20 @@ class TestCluster(unittest.TestCase):
     def make_cluster(self, num_nodes):
         self.assertGreaterEqual(num_nodes, 3)
 
-        ensemble = {i: '10.0.1.{}'.format(i) for i in range(1, num_nodes + 1)}
-        for i in range(1, num_nodes + 1):
+        ensemble = {i: '10.0.1.{}'.format(i) for i in xrange(1, num_nodes + 1)}
+        zk_servers = ctu.ensemble_servers_string(ensemble)
+        external_storage = ctu.external_storage_string(ensemble)
+        for i in xrange(1, num_nodes + 1):
             hostname = 'ramcloud-node-{}'.format(i)
             self.node_containers[hostname] = ctu.launch_node('main',
                                                             hostname,
-                                                            ensemble,
+                                                            zk_servers,
+                                                            external_storage,
                                                             i,
                                                             ensemble[i],
                                                             self.node_image,
                                                             self.ramcloud_network)
-        self.rc_client.connect(ctu.external_storage_string(ensemble), 'main')
+        self.rc_client.connect(external_storage, 'main')
 
     def test_read_write(self):
         self.make_cluster(num_nodes=3)
