@@ -120,9 +120,23 @@ The command may be run within the dev-env or on your host, it does not matter.
 
 # Known Unit Test Issues
 
-The unit tests pass for 90% of the time it is ran, but has failures, segfaults,
-or freezes for the other 10%. None of the freezes have been replicated in gdb,
-but the failures and segfaults have been.
+The following unit tests appear to fail consistently after rebasing RAMCloud.
+Further investigation required.
+
+InfRcTransportTest.sanityCheck
+InfRcTransportTest.ClientRpc_sendZeroCopy
+InfRcTransportTest.InfRcSession_abort_onClientSendQueue
+InfRcTransportTest.InfRcSession_abort_onOutstandingRpcs
+InfRcTransportTest.InfRcSession_cancelRequest_rpcPending
+InfRcTransportTest.InfRcSession_cancelRequest_rpcSent
+InfRcTransportTest.getRpcInfo
+InfRcTransportTest.ClientRpc_sendRequest_sessionAborted
+InfRcTransportTest.ServerRpc_getClientServiceLocator
+InfUdDriverTest.basics
+
+For other tests, we pass for 90% of the time it is ran, but there are still
+failures, segfaults, or freezes for the other 10%. None of the freezes have 
+been replicated in gdb, but the failures and segfaults have been.
 
 The most common segfaults are (1) in MultiFileStorage.cc:784 trying to read
 from a specific file on disk, with the file set up in a manner different than

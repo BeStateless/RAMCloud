@@ -9,6 +9,12 @@ logger = logging.getLogger('cluster')
 docker_client = docker.from_env()
 docker_api = docker.APIClient(base_url='unix://var/run/docker.sock')
 
+def get_host(locator):
+    # locator should be in format 'k1=v1,k2=v2,....,kn=vn'
+    args = filter(lambda x: x.find('=') >= 0, locator.split(','))
+    arg_map = {k : v for (k,v) in map(lambda a: a.split('=', 2), args)}
+    return arg_map['basic+udp:host']
+
 def external_storage_string(ensemble):
     return 'zk:' + ','.join(['{}:2181'.format(ip) for (_, ip) in ensemble.items()])
 
