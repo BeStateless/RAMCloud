@@ -1,4 +1,4 @@
-# This series applies on GIT commit 998e826f73878ff775c14ea46d5686f447f88576
+# This series applies on GIT commit 3f4a0ef1f881184da116faa7a70e2a14681dc303
 disable-log-before-main.patch
 fix-dpdk-mbuf-release.patch
 dpdk-config.patch
@@ -6,4 +6,3 @@ multiop-includes.patch
 remove-java.patch
 make-rc-unit-test.patch
 flaky-test_fix.patch
-recovery-test_running.patch

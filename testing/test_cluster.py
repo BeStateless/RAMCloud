@@ -15,6 +15,11 @@ class TestCluster(unittest.TestCase):
             container.remove(force=True)
         self.ramcloud_network.remove()
 
+    def createTestValue(self):
+        self.rc_client.create_table('test', serverSpan = 2)
+        self.table = self.rc_client.get_table_id('test')
+        self.rc_client.write(self.table, 'testKey', 'testValue')
+
     def make_cluster(self, num_nodes):
         self.assertGreaterEqual(num_nodes, 3)
 
@@ -23,7 +28,7 @@ class TestCluster(unittest.TestCase):
         external_storage = ctu.external_storage_string(ensemble)
         for i in xrange(1, num_nodes + 1):
             hostname = 'ramcloud-node-{}'.format(i)
-            self.node_containers[hostname] = ctu.launch_node('main',
+            self.node_containers[ensemble[i]] = ctu.launch_node('main',
                                                             hostname,
                                                             zk_servers,
                                                             external_storage,
@@ -52,6 +57,24 @@ class TestCluster(unittest.TestCase):
         value, version = self.rc_client.read(table, 1)
 
         expect(value).equals('Good weather')
+
+    @unittest.skip("trying stuff out")
+    def test_01_simple_recovery(self):
+        self.make_cluster(num_nodes=3)  # num_nodes=8
+        self.createTestValue()
+        value = self.rc_client.read(self.table, 'testKey')
+        expect(value).equals(('testValue', 1))
+
+        # find the host corresponding to the server with our table and 'testKey',
+        # then kill it!
+        locator =  self.rc_client.testing_get_service_locator(self.table, 'testKey')
+        host = ctu.get_host(locator)
+        self.node_containers[host].kill()
+
+        # read the value again (without waiting for the server to recover). It 
+        # should come out to the same value
+        value = self.rc_client.read(self.table, 'testKey')
+        expect(value).equals(('testValue', 1))
 
 if __name__ == '__main__':
     unittest.main()

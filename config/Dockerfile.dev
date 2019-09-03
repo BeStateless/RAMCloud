@@ -20,6 +20,7 @@ RUN apt-get update \
       libpcre++-dev \
       libssl-dev \
       libzookeeper-mt-dev \
+      procps \
       protobuf-compiler \
       python-pip \
       # Install this python package to work around https://github.com/docker/docker-py/issues/1502
