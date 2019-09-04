@@ -25,10 +25,10 @@ to run sockets that are not socket zero.
  5 files changed, 133 insertions(+), 34 deletions(-)
 
 diff --git a/src/DpdkDriver.cc b/src/DpdkDriver.cc
-index af56e8e5..3f5e9719 100644
+index bd24aacc..1a63bd2f 100644
 --- a/src/DpdkDriver.cc
 +++ b/src/DpdkDriver.cc
-@@ -89,6 +89,7 @@ DpdkDriver::DpdkDriver()
+@@ -90,6 +90,7 @@ DpdkDriver::DpdkDriver()
      , loopbackRing(NULL)
      , hasHardwareFilter(true)
      , bandwidthMbps(10000)
@@ -36,7 +36,7 @@ index af56e8e5..3f5e9719 100644
      , fileLogger(NOTICE, "DPDK: ")
  {
      localMac.construct("01:23:45:67:89:ab");
-@@ -113,7 +114,11 @@ DpdkDriver::DpdkDriver()
+@@ -114,7 +115,11 @@ DpdkDriver::DpdkDriver()
   *      Selects which physical port to use for communication.
   */
  
@@ -49,7 +49,7 @@ index af56e8e5..3f5e9719 100644
      : Driver(context)
      , packetBufsUtilized(0)
      , locatorString()
-@@ -123,6 +128,7 @@ DpdkDriver::DpdkDriver(Context* context, int port)
+@@ -124,6 +129,7 @@ DpdkDriver::DpdkDriver(Context* context, int port)
      , loopbackRing(NULL)
      , hasHardwareFilter(true)             // Cleared later if not applicable
      , bandwidthMbps(10000)                // Default bandwidth = 10 gbs
@@ -57,7 +57,7 @@ index af56e8e5..3f5e9719 100644
      , fileLogger(NOTICE, "DPDK: ")
  {
      struct ether_addr mac;
-@@ -130,6 +136,12 @@ DpdkDriver::DpdkDriver(Context* context, int port)
+@@ -131,6 +137,12 @@ DpdkDriver::DpdkDriver(Context* context, int port)
      struct rte_eth_conf portConf;
      int ret;
  
@@ -70,7 +70,7 @@ index af56e8e5..3f5e9719 100644
      portId = downCast<uint8_t>(port);
  
      // Initialize the DPDK environment with some default parameters.
-@@ -138,34 +150,43 @@ DpdkDriver::DpdkDriver(Context* context, int port)
+@@ -139,34 +151,43 @@ DpdkDriver::DpdkDriver(Context* context, int port)
      // This is a bug in DPDK as of 9/2016; if the bug gets fixed, then
      // the --file-prefix argument can be removed.
      LOG(NOTICE, "Using DPDK version %s", rte_version());
@@ -142,7 +142,7 @@ index af56e8e5..3f5e9719 100644
      }
  
      // ensure that DPDK was able to detect a compatible and available NIC
-@@ -204,10 +225,29 @@ DpdkDriver::DpdkDriver(Context* context, int port)
+@@ -205,10 +226,29 @@ DpdkDriver::DpdkDriver(Context* context, int port)
            }
      }
  
@@ -174,7 +174,7 @@ index af56e8e5..3f5e9719 100644
  
      // set the MTU that the NIC port should support
      ret = rte_eth_dev_set_mtu(portId, MAX_PAYLOAD_SIZE);
-@@ -443,7 +483,7 @@ DpdkDriver::sendPacket(const Address* addr,
+@@ -444,7 +484,7 @@ DpdkDriver::sendPacket(const Address* addr,
      // Fill out the PCP field and the Ethernet frame type of the encapsulated
      // frame (DEI and VLAN ID are not relevant and trivially set to 0).
      struct vlan_hdr* vlanHdr = reinterpret_cast<struct vlan_hdr*>(p);
@@ -237,10 +237,10 @@ index f68d4e72..0b89f4db 100644
               ProgramOptions::value<int32_t>(&options.portTimeout)->
                  default_value(-1), // Overriding to the initial value.
 diff --git a/src/OptionParser.h b/src/OptionParser.h
-index e241c726..df1a8591 100644
+index 55e1108f..b715995b 100644
 --- a/src/OptionParser.h
 +++ b/src/OptionParser.h
-@@ -53,6 +53,9 @@ class CommandLineOptions {
+@@ -52,6 +52,9 @@ class CommandLineOptions {
          , clusterName()
          , configDir()
          , dpdkPort(0)
@@ -250,7 +250,7 @@ index e241c726..df1a8591 100644
      {
      }
  
-@@ -134,6 +137,33 @@ class CommandLineOptions {
+@@ -133,6 +136,33 @@ class CommandLineOptions {
          return dpdkPort;
      }
  
@@ -284,7 +284,7 @@ index e241c726..df1a8591 100644
      string coordinatorLocator;      ///< See getCoordinatorLocator().
      string localLocator;            ///< See getLocalLocator().
      string externalStorageLocator;  ///< See getExternalStorageLocator().
-@@ -143,6 +173,9 @@ class CommandLineOptions {
+@@ -142,6 +172,9 @@ class CommandLineOptions {
      string clusterName;             ///< See getClusterName().
      string configDir;               ///< See getConfigDir().
      int dpdkPort;                   ///< See getDpdkPort().
