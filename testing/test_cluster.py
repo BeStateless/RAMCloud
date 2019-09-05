@@ -1,4 +1,5 @@
 import ramcloud
+import os
 import unittest
 from pyexpect import expect
 import cluster_test_utils as ctu
@@ -38,6 +39,23 @@ class TestCluster(unittest.TestCase):
                                                             self.ramcloud_network)
         self.rc_client.connect(external_storage, 'main')
 
+    def simple_recovery(self, kill_command):
+        self.make_cluster(num_nodes=7)
+        self.createTestValue()
+        value = self.rc_client.read(self.table, 'testKey')
+        expect(value).equals(('testValue', 1))
+
+        # find the host corresponding to the server with our table and 'testKey',
+        # then kill its rc-server!
+        locator =  self.rc_client.testing_get_service_locator(self.table, 'testKey')
+        host = ctu.get_host(locator)
+        self.node_containers[host].exec_run(kill_command)
+
+        # read the value again (without waiting for the server to recover). It 
+        # should come out to the same value
+        value = self.rc_client.read(self.table, 'testKey')
+        expect(value).equals(('testValue', 1))
+
     def test_read_write(self):
         self.make_cluster(num_nodes=3)
         self.rc_client.create_table('test_table')
@@ -58,23 +76,11 @@ class TestCluster(unittest.TestCase):
 
         expect(value).equals('Good weather')
 
-    @unittest.skip("trying stuff out")
-    def test_01_simple_recovery(self):
-        self.make_cluster(num_nodes=3)  # num_nodes=8
-        self.createTestValue()
-        value = self.rc_client.read(self.table, 'testKey')
-        expect(value).equals(('testValue', 1))
+    def test_01_simple_recovery_graceful_server_down(self):
+        self.simple_recovery(kill_command = 'killall -SIGTERM rc-server')
 
-        # find the host corresponding to the server with our table and 'testKey',
-        # then kill it!
-        locator =  self.rc_client.testing_get_service_locator(self.table, 'testKey')
-        host = ctu.get_host(locator)
-        self.node_containers[host].kill()
-
-        # read the value again (without waiting for the server to recover). It 
-        # should come out to the same value
-        value = self.rc_client.read(self.table, 'testKey')
-        expect(value).equals(('testValue', 1))
+    def test_01_simple_recovery_forced_server_down(self):
+        self.simple_recovery(kill_command = 'killall -SIGKILL rc-server')
 
 if __name__ == '__main__':
     unittest.main()
