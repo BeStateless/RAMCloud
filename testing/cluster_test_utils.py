@@ -1,4 +1,5 @@
 import docker
+import kazoo.client
 import logging
 import logging.config
 import ramcloud
@@ -16,7 +17,7 @@ def get_host(locator):
     return arg_map['basic+udp:host']
 
 def external_storage_string(ensemble):
-    return 'zk:' + ','.join(['{}:2181'.format(ip) for (_, ip) in ensemble.items()])
+    return ','.join(['{}:2181'.format(ip) for (_, ip) in ensemble.items()])
 
 def ensemble_servers_string(ensemble):
     return ' '.join(['server.{}={}:2888:3888;2181'.format(zkid, ip) for (zkid, ip) in ensemble.items()])
@@ -69,3 +70,8 @@ def launch_node(cluster_name, hostname, zk_servers, external_storage, zkid, ip, 
 
     logger.info('Launching node container %s with IP address %s...successful', hostname, ip)
     return docker_client.containers.get(container_id)
+
+def get_zookeeper_client(ensemble, read_only=True):
+    client = kazoo.client.KazooClient(hosts=external_storage_string(ensemble), read_only=read_only)
+    client.start()
+    return client
