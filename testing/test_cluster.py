@@ -3,7 +3,10 @@ import ramcloud
 import Table_pb2
 import unittest
 from pyexpect import expect
+from timeout_decorator import timeout
 import cluster_test_utils as ctu
+
+ten_minutes = 600  # number of seconds in 10 minutes
 
 class TestCluster(unittest.TestCase):
     def setUp(self):
@@ -57,6 +60,7 @@ class TestCluster(unittest.TestCase):
         value = self.rc_client.read(self.table, 'testKey')
         expect(value).equals(('testValue', 1))
 
+    @timeout(ten_minutes)
     def test_zookeeper_read(self):
         self.make_cluster(num_nodes=4)
         self.createTestValue()
@@ -71,6 +75,7 @@ class TestCluster(unittest.TestCase):
         expect(table_parsed.id).equals(1L)
         expect(table_parsed.name).equals("test")
 
+    @timeout(ten_minutes)
     def test_read_write(self):
         self.make_cluster(num_nodes=3)
         self.rc_client.create_table('test_table')
@@ -80,6 +85,7 @@ class TestCluster(unittest.TestCase):
 
         expect(value).equals('Hello, World!')
 
+    @timeout(ten_minutes)
     def test_two_writes(self):
         self.make_cluster(num_nodes=4)
         self.rc_client.create_table('test_table')
@@ -91,9 +97,11 @@ class TestCluster(unittest.TestCase):
 
         expect(value).equals('Good weather')
 
+    @timeout(ten_minutes)
     def test_01_simple_recovery_graceful_server_down(self):
         self.simple_recovery(kill_command = 'killall -SIGTERM rc-server')
 
+    @timeout(ten_minutes)
     def test_01_simple_recovery_forced_server_down(self):
         self.simple_recovery(kill_command = 'killall -SIGKILL rc-server')
 
