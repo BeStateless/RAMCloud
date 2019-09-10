@@ -1,5 +1,6 @@
-import ramcloud
 import os
+import ramcloud
+import Table_pb2
 import unittest
 from pyexpect import expect
 import cluster_test_utils as ctu
@@ -24,19 +25,19 @@ class TestCluster(unittest.TestCase):
     def make_cluster(self, num_nodes):
         self.assertGreaterEqual(num_nodes, 3)
 
-        ensemble = {i: '10.0.1.{}'.format(i) for i in xrange(1, num_nodes + 1)}
-        zk_servers = ctu.ensemble_servers_string(ensemble)
-        external_storage = ctu.external_storage_string(ensemble)
+        self.ensemble = {i: '10.0.1.{}'.format(i) for i in xrange(1, num_nodes + 1)}
+        zk_servers = ctu.ensemble_servers_string(self.ensemble)
+        external_storage = 'zk:' + ctu.external_storage_string(self.ensemble)
         for i in xrange(1, num_nodes + 1):
             hostname = 'ramcloud-node-{}'.format(i)
-            self.node_containers[ensemble[i]] = ctu.launch_node('main',
-                                                            hostname,
-                                                            zk_servers,
-                                                            external_storage,
-                                                            i,
-                                                            ensemble[i],
-                                                            self.node_image,
-                                                            self.ramcloud_network)
+            self.node_containers[self.ensemble[i]] = ctu.launch_node('main',
+                                                                     hostname,
+                                                                     zk_servers,
+                                                                     external_storage,
+                                                                     i,
+                                                                     self.ensemble[i],
+                                                                     self.node_image,
+                                                                     self.ramcloud_network)
         self.rc_client.connect(external_storage, 'main')
 
     def simple_recovery(self, kill_command):
@@ -55,6 +56,20 @@ class TestCluster(unittest.TestCase):
         # should come out to the same value
         value = self.rc_client.read(self.table, 'testKey')
         expect(value).equals(('testValue', 1))
+
+    def test_zookeeper_read(self):
+        self.make_cluster(num_nodes=4)
+        self.createTestValue()
+        zk_client = ctu.get_zookeeper_client(self.ensemble)
+
+        # Read the ZooKeeper entry for the table and make sure it looks sane.
+        # This mostly tests our ability to read from ZooKeeper and parse the
+        # GRPC contents correctly.
+        table_data = zk_client.get('/ramcloud/main/tables/test')[0]
+        table_parsed = Table_pb2.Table()
+        table_parsed.ParseFromString(table_data)
+        expect(table_parsed.id).equals(1L)
+        expect(table_parsed.name).equals("test")
 
     def test_read_write(self):
         self.make_cluster(num_nodes=3)

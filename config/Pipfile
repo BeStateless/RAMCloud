@@ -9,6 +9,9 @@ verify_ssl = true
 docker = "*"
 pyaml = "*"
 pyexpect = "*"
+grpcio = "*"
+grpcio-tools = "*"
+kazoo = "*"
 
 [requires]
 python_version = "2.7"

@@ -48,3 +48,10 @@ mv install/bin/server      install/bin/rc-server
 
 # Move the libraries to the correct place instead of in the ramcloud subdirectory.
 mv install/lib/ramcloud/* install/lib && rmdir install/lib/ramcloud
+
+# Build the proto files so we can read what RAMCloud puts in ZooKeeper.
+cd src
+PROTO_OUT=/src/RAMCloud/bindings/python
+for proto_file in $(ls *.proto); do
+  python -m grpc_tools.protoc -I. --python_out=${PROTO_OUT} --grpc_python_out=${PROTO_OUT} ${proto_file}
+done
