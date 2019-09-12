@@ -2,3 +2,4 @@ RAMCloud
 RAMCloud-install
 __pycache__/
 *.py[cod]
+tmp/

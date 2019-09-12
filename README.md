@@ -53,6 +53,12 @@ been spun up, the python RAMCloud client is used to connect to the running
 RAMCloud cluster, create a RAMCloud table, write a value to the table, read that
 value back, and validate that it has the correct value.
 
+Because integration tests run slow. If you only wish to rerun one specific
+integration test (for example, test_zookeeper_read() within the class 
+TestInfrastructure of file test_infrastructure.py), you can do so this way.
+
+    python -m unittest test_infrastructure.TestInfrastructure.test_zookeeper_read
+
 To make changes to the RAMCloud code simply make changes to the code in the
 `./RAMCloud` directory on your host machine, and then run
 `./config/make-ramcloud` again on the the development environment bash shell.
@@ -117,6 +123,23 @@ the command
     docker run -it --rm --net ramcloud-net zookeeper zkCli.sh -server ramcloud-node-1
 
 The command may be run within the dev-env or on your host, it does not matter.
+
+# Modifying Integration Test Packages
+
+Changes to command-line packages used in the development environment container
+need to be made to config/Dockerfile.dev, and changes to command-line packages
+used in the node containers running RAMCloud or ZooKeeper need to be made to
+config/Dockerfile.node
+
+Changes to the packages used in the Integration Tests (python 2.7) need to be
+made to config/Pipfile. Then, within the development environment container,
+do the following:
+
+    cd /src/config
+    pipenv update
+
+This will modify the config/Pipfile.lock file with the appropriate new packages,
+existing package versions, and modified hash values.
 
 # Known Unit Test Issues
 
