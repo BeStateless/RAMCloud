@@ -114,7 +114,7 @@ It is easy to use the ZooKeeper CLI to look at the contents of ZooKeeper, which
 is used by RAMCloud to store persistent configuration information. Simply run
 the command
 
-    docker run -it --rm --net ramcloud-net zookeeper zkCli.sh -server zookeeper-1
+    docker run -it --rm --net ramcloud-net zookeeper zkCli.sh -server ramcloud-node-1
 
 The command may be run within the dev-env or on your host, it does not matter.
 

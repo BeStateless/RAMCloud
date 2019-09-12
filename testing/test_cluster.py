@@ -1,5 +1,6 @@
 import os
 import ramcloud
+import time
 import Table_pb2
 import unittest
 from pyexpect import expect
@@ -44,7 +45,7 @@ class TestCluster(unittest.TestCase):
         self.rc_client.connect(external_storage, 'main')
 
     def simple_recovery(self, kill_command):
-        self.make_cluster(num_nodes=7)
+        self.make_cluster(num_nodes=4)
         self.createTestValue()
         value = self.rc_client.read(self.table, 'testKey')
         expect(value).equals(('testValue', 1))
@@ -98,12 +99,55 @@ class TestCluster(unittest.TestCase):
         expect(value).equals('Good weather')
 
     @timeout(ten_minutes)
-    def test_01_simple_recovery_graceful_server_down(self):
+    def test_master_server_graceful_down_can_still_read(self):
         self.simple_recovery(kill_command = 'killall -SIGTERM rc-server')
 
     @timeout(ten_minutes)
-    def test_01_simple_recovery_forced_server_down(self):
+    def test_master_server_forced_down_can_still_read(self):
         self.simple_recovery(kill_command = 'killall -SIGKILL rc-server')
+
+    @timeout(ten_minutes)
+    def test_master_server_down_can_still_write(self):
+        self.make_cluster(num_nodes=4)
+        self.createTestValue()
+        value = self.rc_client.read(self.table, 'testKey')
+        expect(value).equals(('testValue', 1))
+
+        # find the host corresponding to the server with our table and 'testKey',
+        # then kill its rc-server!
+        locator =  self.rc_client.testing_get_service_locator(self.table, 'testKey')
+        host = ctu.get_host(locator)
+        self.node_containers[host].exec_run('killall -SIGKILL rc-server')
+
+        # after the master server is down, we try to write (not read). We expect
+        # the read that follows to correctly contain our value.
+        self.rc_client.write(self.table, 'testKey', 'testValue2')
+        value = self.rc_client.read(self.table, 'testKey')
+        expect(value).equals(('testValue2', 2))
+
+    @timeout(ten_minutes)
+    def test_elected_coordinator_down_can_still_read(self):
+        self.make_cluster(num_nodes=4)
+        self.createTestValue()
+        value = self.rc_client.read(self.table, 'testKey')
+        expect(value).equals(('testValue', 1))
+
+        # find the host corresponding to the elected coordinator, kill its rc-coordinator!
+        # we should still be able to get the testKey.
+        zk_client = ctu.get_zookeeper_client(self.ensemble)
+        locator =  zk_client.get('/ramcloud/main/coordinator')[0]
+        host = ctu.get_host(locator)
+        self.node_containers[host].exec_run('killall -SIGKILL rc-coordinator')
+
+        # after the coordinator is down, we try to read. We expect
+        # to see our value. We also expect a different coordinator.
+        value = self.rc_client.read(self.table, 'testKey')
+        time.sleep(3)  # 3 seconds is needed for a new coordinator to be elected & results to show in zk
+        new_locator =  zk_client.get('/ramcloud/main/coordinator')[0]
+
+        expect(value).equals(('testValue', 1))
+        expect(new_locator).not_equals(None)
+        expect(new_locator).not_equals(locator)
 
 if __name__ == '__main__':
     unittest.main()
