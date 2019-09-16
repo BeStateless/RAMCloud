@@ -10,10 +10,10 @@ behvior when freeing DPDK buffers.
  1 file changed, 3 insertions(+), 3 deletions(-)
 
 diff --git a/src/DpdkDriver.cc b/src/DpdkDriver.cc
-index 39fec055..af56e8e5 100644
+index ef557d33..bd24aacc 100644
 --- a/src/DpdkDriver.cc
 +++ b/src/DpdkDriver.cc
-@@ -71,7 +71,7 @@ namespace {
+@@ -72,7 +72,7 @@ namespace {
  // Short-hand to obtain the starting address of a DPDK rte_mbuf based on its
  // payload address.
  #define payload_to_mbuf(payload) reinterpret_cast<struct rte_mbuf*>( \
@@ -22,7 +22,7 @@ index 39fec055..af56e8e5 100644
  
  constexpr uint16_t DpdkDriver::PRIORITY_TO_PCP[8];
  
-@@ -351,8 +351,8 @@ DpdkDriver::receivePackets(uint32_t maxPackets,
+@@ -352,8 +352,8 @@ DpdkDriver::receivePackets(uint32_t maxPackets,
      for (uint32_t i = 0; i < totalPkts; i++) {
          struct rte_mbuf* m = mPkts[i];
          char* data = rte_pktmbuf_mtod(m, char*);
