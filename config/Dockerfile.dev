@@ -37,5 +37,5 @@ RUN apt-get update \
  && apt-get install --yes \
       docker-ce \
  && rm -rf /var/lib/apt/lists/*
-ENV PYTHONPATH=/src/RAMCloud/scripts:/src/RAMCloud/bindings/python
+ENV PYTHONPATH=/src/RAMCloud/scripts:/src/RAMCloud/bindings/python:/src/testing
 ENV LD_LIBRARY_PATH=/src/RAMCloud/install/lib
