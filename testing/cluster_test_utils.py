@@ -1,9 +1,32 @@
+import copy
 import docker
 import kazoo.client
 import logging
 import logging.config
 import os
 import ramcloud
+
+import CoordinatorClusterClock_pb2
+import CoordinatorUpdateInfo_pb2
+import EnumerationIterator_pb2
+import Histogram_pb2
+import Indexlet_pb2
+import LogMetrics_pb2
+import MasterRecoveryInfo_pb2
+import MetricList_pb2
+import ProtoBufTest_pb2
+import RecoveryPartition_pb2
+import ServerConfig_pb2
+import ServerListEntry_pb2
+import ServerList_pb2
+import ServerStatistics_pb2
+import SpinLockStatistics_pb2
+import TableConfig_pb2
+import Tablets_pb2
+import TableManager_pb2
+import Table_pb2
+
+from google.protobuf import text_format
 
 logging.config.fileConfig('/src/testing/log.ini')
 logger = logging.getLogger('cluster')
@@ -86,6 +109,9 @@ def launch_node(cluster_name, hostname, zk_servers, external_storage, zkid, ip, 
 # >>> x.createTestValue()
 # < Do some stuff >
 # >>> x.outputLogs()
+# >>> x.zkDump()
+# < You can also do x.outputBackups(), but that's really slow, and be sure to remove the tar files when you're done >
+# < Check output files in /src/tmp >
 # >>> x.tearDown()
 class ClusterTest:
     def setUp(self, num_nodes = 4):
@@ -129,8 +155,109 @@ class ClusterTest:
             for line in container.logs(stream=True, follow=False):
                 f.write(line)
             f.close()
+    
+    # NOTE: This method runs slowly.
+    def outputBackups(self, outpath="/src/tmp", infile="/var/tmp/backup.log"):
+        if not os.path.exists(outpath):
+            os.makedirs(outpath)
+        for (_, container) in self.node_containers.items():
+            outfile = '%s/%s.backup.tar' % (outpath, container.name)
+            f = open(outfile, 'wb')
+            bits, stat = container.get_archive(infile)
+            for chunk in bits:
+                f.write(chunk)
+            f.close()
+
+    def zkDump(self, path="/src/tmp", zk_client=None, stop_zk=True):
+        if not os.path.exists(path):
+            os.makedirs(path)
+        if not zk_client:
+            zk_client = get_zookeeper_client(self.ensemble)
+        zk_table_configs = [
+            ZkTableConfiguration(
+                outfile = "config.out", 
+                zk_path = "/zookeeper/config", 
+                proto = "string", 
+                is_leaf = True),
+            ZkTableConfiguration(
+                outfile = "quota.out", 
+                zk_path = "/zookeeper/quota", 
+                proto = "string", 
+                is_leaf = True),
+            ZkTableConfiguration(
+                outfile = "coordinatorClusterClock.out", 
+                zk_path = "/ramcloud/main/coordinatorClusterClock", 
+                proto = CoordinatorClusterClock_pb2.CoordinatorClusterClock(), 
+                is_leaf = True),
+            ZkTableConfiguration(
+                outfile = "tables.out", 
+                zk_path = "/ramcloud/main/tables", 
+                proto = Table_pb2.Table(), 
+                is_leaf = False),
+            ZkTableConfiguration(
+                outfile = "tableManager.out", 
+                zk_path = "/ramcloud/main/tableManager", 
+                proto = TableManager_pb2.TableManager(), 
+                is_leaf = True),
+            ZkTableConfiguration(
+                outfile = "coordinator.out", 
+                zk_path = "/ramcloud/main/coordinator", 
+                proto = "string", 
+                is_leaf = True),
+            ZkTableConfiguration(
+                outfile = "servers.out", 
+                zk_path = "/ramcloud/main/servers", 
+                proto = ServerListEntry_pb2.ServerListEntry(), 
+                is_leaf = False),
+            ZkTableConfiguration(
+                outfile = "coordinatorUpdateManager.out", 
+                zk_path = "/ramcloud/main/coordinatorUpdateManager", 
+                proto = CoordinatorUpdateInfo_pb2.CoordinatorUpdateInfo(), 
+                is_leaf = True),
+            ZkTableConfiguration(
+                outfile = "clientLeaseAuthority.out", 
+                zk_path = "/ramcloud/main/clientLeaseAuthority", 
+                proto = "string", 
+                is_leaf = False),
+        ]
+        for zk_table_config in zk_table_configs:
+            zk_table_config.dump(path, zk_client)
+        if stop_zk:
+            zk_client.stop()
 
     def tearDown(self):
         for (_, container) in self.node_containers.items():
             container.remove(force=True)
         self.ramcloud_network.remove()
+
+class ZkTableConfiguration:
+    def __init__(self, outfile, zk_path, proto, is_leaf):
+        self.outfile = outfile
+        self.zk_path = zk_path
+        self.proto = proto
+        self.is_leaf = is_leaf
+    
+    def dump(self, outpath, zk_client):
+        # If the zk_path doesn't exist, then don't output anything. That's not an error.
+        # "/ramcloud/main/tableManager" doesn't always exist, for example.
+        if not zk_client.exists(self.zk_path):
+            return
+        zk_paths = [self.zk_path]
+        if not self.is_leaf:
+            zk_paths = ["%s/%s" % (self.zk_path, child) for child in zk_client.get_children(self.zk_path)]
+        outfile_complete = "%s/%s" % (outpath, self.outfile)
+        f = open(outfile_complete, 'w')
+        for zk_path in zk_paths:
+            data = zk_client.get(zk_path)[0]
+            outstring = ""
+            if type(self.proto) is str:
+                outstring = data
+            else:
+                outproto = copy.deepcopy(self.proto)
+                outproto.ParseFromString(data)
+                outstring = text_format.MessageToString(outproto)
+            liner = "%s ==>\n"%zk_path
+            f.write(liner)
+            f.write(outstring)
+            f.write('\n')
+        f.close()

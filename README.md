@@ -59,6 +59,10 @@ TestInfrastructure of file test_infrastructure.py), you can do so this way.
 
     python -m unittest test_infrastructure.TestInfrastructure.test_zookeeper_read
 
+In addition, the comments of cluster_test_utils.py provides some suggestions
+to try in the Python interpreter (within the development environment container)
+for debugging if you run into trouble with the integration tests.
+
 To make changes to the RAMCloud code simply make changes to the code in the
 `./RAMCloud` directory on your host machine, and then run
 `./config/make-ramcloud` again on the the development environment bash shell.
