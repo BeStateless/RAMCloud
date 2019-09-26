@@ -1,0 +1,789 @@
+Adds Plus One Backup scheme, which selects the backupServerId determinstically as (masterServerId+1)%n
+
+From: Ofer Gill <ofer.gill@stateless.net>
+
+
+---
+ src/AbstractLogTest.cc             |    2 -
+ src/BackupSelector.cc              |    5 +-
+ src/BackupSelector.h               |    6 ++
+ src/CleanableSegmentManagerTest.cc |    2 -
+ src/LockTableTest.cc               |    2 -
+ src/LogCleanerTest.cc              |    2 -
+ src/LogEntryRelocatorTest.cc       |    2 -
+ src/LogIteratorTest.cc             |    2 -
+ src/LogTest.cc                     |    2 -
+ src/Makefrag                       |    1 
+ src/MakefragTest                   |    1 
+ src/MasterServiceTest.cc           |    8 +--
+ src/ObjectManager.cc               |    1 
+ src/PlusOneBackupSelector.cc       |   90 ++++++++++++++++++++++++++++++++
+ src/PlusOneBackupSelector.h        |   42 +++++++++++++++
+ src/PlusOneBackupSelectorTest.cc   |  101 ++++++++++++++++++++++++++++++++++++
+ src/RecoverySegmentBuilderTest.cc  |    2 -
+ src/ReplicaManager.cc              |   17 ++++++
+ src/ReplicaManager.h               |    7 ++
+ src/ReplicaManagerTest.cc          |    2 -
+ src/SegmentManagerTest.cc          |    2 -
+ src/ServerConfig.h                 |    8 +++
+ src/ServerConfig.proto             |    4 +
+ src/ServerMain.cc                  |    5 ++
+ src/ServerTracker.h                |   28 ++++++++++
+ src/ServerTrackerTest.cc           |   29 ++++++++++
+ src/SideLogTest.cc                 |    2 -
+ 27 files changed, 358 insertions(+), 17 deletions(-)
+ create mode 100644 src/PlusOneBackupSelector.cc
+ create mode 100644 src/PlusOneBackupSelector.h
+ create mode 100644 src/PlusOneBackupSelectorTest.cc
+
+diff --git a/src/AbstractLogTest.cc b/src/AbstractLogTest.cc
+index 47093f7e..feeeb11e 100644
+--- a/src/AbstractLogTest.cc
++++ b/src/AbstractLogTest.cc
+@@ -57,7 +57,7 @@ class AbstractLogTest : public ::testing::Test {
+           serverId(ServerId(57, 0)),
+           serverList(&context),
+           serverConfig(ServerConfig::forTesting()),
+-          replicaManager(&context, &serverId, 0, false, false),
++          replicaManager(&context, &serverId, 0, false, false, false),
+           masterTableMetadata(),
+           allocator(&serverConfig),
+           segmentManager(&context, &serverConfig, &serverId,
+diff --git a/src/BackupSelector.cc b/src/BackupSelector.cc
+index 47dbf30b..9a9366bf 100644
+--- a/src/BackupSelector.cc
++++ b/src/BackupSelector.cc
+@@ -61,6 +61,7 @@ BackupSelector::BackupSelector(Context* context, const ServerId* serverId,
+     , allowLocalBackup(allowLocalBackup)
+     , replicationIdMap()
+     , okToLogNextProblem(true)
++    , maxAttempts(100)
+ {
+ }
+ 
+@@ -119,8 +120,8 @@ ServerId
+ BackupSelector::selectSecondary(uint32_t numBackups,
+                                 const ServerId backupIds[])
+ {
+-    int attempts;
+-    for (attempts = 0; attempts < 100; attempts++) {
++    uint32_t attempts = 0;
++    for (attempts = 0; attempts < maxAttempts; attempts++) {
+         applyTrackerChanges();
+         ServerId id = tracker.getRandomServerIdWithService(
+             WireFormat::BACKUP_SERVICE);
+diff --git a/src/BackupSelector.h b/src/BackupSelector.h
+index f98d74da..81783410 100644
+--- a/src/BackupSelector.h
++++ b/src/BackupSelector.h
+@@ -123,6 +123,12 @@ class BackupSelector : public BaseBackupSelector {
+      */
+     bool okToLogNextProblem;
+ 
++    /**
++     * Indicates the maximum number of attempts to find a secondary 
++     * serverId.
++     */
++    const uint32_t maxAttempts;
++
+   PRIVATE:
+     bool conflict(const ServerId backupId,
+                   const ServerId otherBackupId) const;
+diff --git a/src/CleanableSegmentManagerTest.cc b/src/CleanableSegmentManagerTest.cc
+index 368ef48c..e41b5aa1 100644
+--- a/src/CleanableSegmentManagerTest.cc
++++ b/src/CleanableSegmentManagerTest.cc
+@@ -96,7 +96,7 @@ class CleanableSegmentManagerTest : public ::testing::Test {
+           serverId(ServerId(57, 0)),
+           serverList(&context),
+           serverConfig(),
+-          replicaManager(&context, &serverId, 0, false, false),
++          replicaManager(&context, &serverId, 0, false, false, false),
+           allocator(serverConfig()),
+           masterTableMetadata(),
+           segmentManager(&context, serverConfig(), &serverId,
+diff --git a/src/LockTableTest.cc b/src/LockTableTest.cc
+index aebb66fb..18b83026 100644
+--- a/src/LockTableTest.cc
++++ b/src/LockTableTest.cc
+@@ -49,7 +49,7 @@ class LockTableTest : public ::testing::Test {
+         , serverId(ServerId(57, 0))
+         , serverList(&context)
+         , serverConfig(ServerConfig::forTesting())
+-        , replicaManager(&context, &serverId, 0, false, false)
++        , replicaManager(&context, &serverId, 0, false, false, false)
+         , masterTableMetadata()
+         , allocator(&serverConfig)
+         , segmentManager(&context, &serverConfig, &serverId,
+diff --git a/src/LogCleanerTest.cc b/src/LogCleanerTest.cc
+index 2c700ec4..f4335e60 100644
+--- a/src/LogCleanerTest.cc
++++ b/src/LogCleanerTest.cc
+@@ -108,7 +108,7 @@ class LogCleanerTest : public ::testing::Test {
+           serverList(&context),
+           masterTableMetadata(),
+           serverConfig(),
+-          replicaManager(&context, &serverId, 0, false, false),
++          replicaManager(&context, &serverId, 0, false, false, false),
+           allocator(serverConfig()),
+           segmentManager(&context, serverConfig(), &serverId,
+                          allocator, replicaManager, &masterTableMetadata),
+diff --git a/src/LogEntryRelocatorTest.cc b/src/LogEntryRelocatorTest.cc
+index 5c2cf375..6fae95e8 100644
+--- a/src/LogEntryRelocatorTest.cc
++++ b/src/LogEntryRelocatorTest.cc
+@@ -42,7 +42,7 @@ class LogEntryRelocatorTest : public ::testing::Test {
+           serverId(ServerId(57, 0)),
+           serverList(&context),
+           serverConfig(ServerConfig::forTesting()),
+-          replicaManager(&context, &serverId, 0, false, false),
++          replicaManager(&context, &serverId, 0, false, false, false),
+           masterTableMetadata(),
+           allocator(&serverConfig),
+           segmentManager(&context, &serverConfig, &serverId,
+diff --git a/src/LogIteratorTest.cc b/src/LogIteratorTest.cc
+index 66ca0b60..63f271fd 100644
+--- a/src/LogIteratorTest.cc
++++ b/src/LogIteratorTest.cc
+@@ -57,7 +57,7 @@ class LogIteratorTest : public ::testing::Test {
+           serverId(ServerId(57, 0)),
+           serverList(&context),
+           serverConfig(ServerConfig::forTesting()),
+-          replicaManager(&context, &serverId, 0, false, false),
++          replicaManager(&context, &serverId, 0, false, false, false),
+           masterTableMetadata(),
+           allocator(&serverConfig),
+           segmentManager(&context, &serverConfig, &serverId,
+diff --git a/src/LogTest.cc b/src/LogTest.cc
+index 325aeedd..86650385 100644
+--- a/src/LogTest.cc
++++ b/src/LogTest.cc
+@@ -59,7 +59,7 @@ class LogTest : public ::testing::Test {
+           serverId(ServerId(57, 0)),
+           serverList(&context),
+           serverConfig(ServerConfig::forTesting()),
+-          replicaManager(&context, &serverId, 0, false, false),
++          replicaManager(&context, &serverId, 0, false, false, false),
+           masterTableMetadata(),
+           allocator(&serverConfig),
+           segmentManager(&context, &serverConfig, &serverId,
+diff --git a/src/Makefrag b/src/Makefrag
+index bf5a6a69..f75b33e4 100644
+--- a/src/Makefrag
++++ b/src/Makefrag
+@@ -124,6 +124,7 @@ SHARED_SRCFILES := \
+ 		   src/PcapFile.cc \
+ 		   src/PerfCounter.cc \
+ 		   src/PerfStats.cc \
++		   src/PlusOneBackupSelector.cc \
+ 		   src/PortAlarm.cc \
+ 		   src/PreparedOp.cc \
+ 		   src/RamCloud.cc \
+diff --git a/src/MakefragTest b/src/MakefragTest
+index 22565962..aefc509f 100644
+--- a/src/MakefragTest
++++ b/src/MakefragTest
+@@ -122,6 +122,7 @@ TESTS_SRCFILES := \
+ 		  src/ParticipantListTest.cc \
+ 		  src/PerfCounterTest.cc \
+ 		  src/PerfStatsTest.cc \
++		  src/PlusOneBackupSelectorTest.cc \
+ 		  src/PortAlarm.cc \
+ 		  src/PortAlarmTest.cc \
+ 		  src/PreparedOpTest.cc \
+diff --git a/src/MasterServiceTest.cc b/src/MasterServiceTest.cc
+index 3c158f3b..b53d496b 100644
+--- a/src/MasterServiceTest.cc
++++ b/src/MasterServiceTest.cc
+@@ -4252,7 +4252,7 @@ TEST_F(MasterServiceTest, detectSegmentRecoveryFailure_failure) {
+ TEST_F(MasterServiceTest, recover_basics) {
+     cluster.coordinator->recoveryManager.start();
+     ServerId serverId(123, 0);
+-    ReplicaManager mgr(&context, &serverId, 1, false, false);
++    ReplicaManager mgr(&context, &serverId, 1, false, false, false);
+ 
+     // Create a segment with objectSafeVersion 23
+     writeRecoverableSegment(&context, mgr, serverId, serverId.getId(), 87, 23U);
+@@ -4346,7 +4346,7 @@ TEST_F(MasterServiceTest, recover_basics) {
+ TEST_F(MasterServiceTest, recover_basic_indexlet) {
+     cluster.coordinator->recoveryManager.start();
+     ServerId serverId(123, 0);
+-    ReplicaManager mgr(&context, &serverId, 1, false, false);
++    ReplicaManager mgr(&context, &serverId, 1, false, false, false);
+ 
+     // Create a segment with objectSafeVersion 23
+     writeRecoverableSegment(&context, mgr, serverId, serverId.getId(),
+@@ -4446,7 +4446,7 @@ TEST_F(MasterServiceTest, recover_basic_indexlet) {
+ TEST_F(MasterServiceTest, recover) {
+     ServerId serverId(123, 0);
+ 
+-    ReplicaManager mgr(&context, &serverId, 1, false, false);
++    ReplicaManager mgr(&context, &serverId, 1, false, false, false);
+     writeRecoverableSegment(&context, mgr, serverId, serverId.getId(), 88);
+ 
+     ServerConfig backup2Config = backup1Config;
+@@ -4728,7 +4728,7 @@ TEST_F(MasterRecoverTest, recover) {
+             {WireFormat::BACKUP_SERVICE, WireFormat::ADMIN_SERVICE},
+             100, ServerStatus::UP});
+     ServerId serverId(99, 0);
+-    ReplicaManager mgr(&context2, &serverId, 1, false, false);
++    ReplicaManager mgr(&context2, &serverId, 1, false, false, false);
+     MasterServiceTest::writeRecoverableSegment(&context, mgr, serverId, 99, 87);
+     MasterServiceTest::writeRecoverableSegment(&context, mgr, serverId, 99, 88);
+ 
+diff --git a/src/ObjectManager.cc b/src/ObjectManager.cc
+index fe269f1d..9c2d3b0c 100644
+--- a/src/ObjectManager.cc
++++ b/src/ObjectManager.cc
+@@ -86,6 +86,7 @@ ObjectManager::ObjectManager(Context* context, ServerId* serverId,
+     , replicaManager(context, serverId,
+                      config->master.numReplicas,
+                      config->master.useMinCopysets,
++                     config->master.usePlusOneBackup,
+                      config->master.allowLocalBackup)
+     , segmentManager(context, config, serverId,
+                      allocator, replicaManager, masterTableMetadata)
+diff --git a/src/PlusOneBackupSelector.cc b/src/PlusOneBackupSelector.cc
+new file mode 100644
+index 00000000..98869476
+--- /dev/null
++++ b/src/PlusOneBackupSelector.cc
+@@ -0,0 +1,90 @@
++/* Copyright (c) 2011-2019 Stanford University
++ *
++ * Permission to use, copy, modify, and distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR(S) DISCLAIM ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL AUTHORS BE LIABLE FOR
++ * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
++ * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
++ * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++
++#include <algorithm>
++
++#include "Cycles.h"
++#include "PlusOneBackupSelector.h"
++#include "ShortMacros.h"
++
++namespace RAMCloud {
++
++// --- PlusOneBackupSelector ---
++
++/**
++ * Constructor.
++ * \param context
++ *      Overall information about this RAMCloud server; used to register
++ *      #tracker with this server's ServerList.
++ * \param serverId
++ *      The ServerId of the backup. Used for selecting appropriate primary
++ *      and secondary replicas.
++ * \param numReplicas
++ *      The replication factor of each segment.
++ * \param allowLocalBackup
++ *      Specifies whether to allow replication to the local backup.
++ */
++PlusOneBackupSelector::PlusOneBackupSelector(Context* context,
++    const ServerId* serverId, uint32_t numReplicas, bool allowLocalBackup)
++    : BackupSelector(context, serverId, numReplicas, allowLocalBackup)
++{
++}
++
++
++/**
++ * Select a node that's masterServerId+1 with wraparound, or if that fails, 
++ * keep moving forward one with wraparound until you either find a node or 
++ * tried them all.
++ * \param numBackups
++ *      The number of entries in the \a backupIds array.
++ * \param backupIds
++ *      An array of numBackups backup ids, none of which may conflict with the
++ *      returned backup. All existing replica locations as well as the
++ *      server id of the master should be listed.
++ */
++ServerId
++PlusOneBackupSelector::selectSecondary(uint32_t numBackups,
++                                       const ServerId backupIds[])
++{
++    applyTrackerChanges();
++    uint32_t totalAttempts = std::min(tracker.size(), maxAttempts);
++    uint32_t attempts = 0;
++    uint32_t index = serverId->indexNumber();
++    
++    for (attempts = 0; attempts < totalAttempts; attempts++) {
++        applyTrackerChanges();
++        index++;
++        if (index > tracker.size()) {
++            index = 1;
++        }
++        ServerId id = tracker.getServerIdAtIndexWithService(
++            index, WireFormat::BACKUP_SERVICE);
++        if (id.isValid() &&
++            !conflictWithAny(id, numBackups, backupIds)) {
++            okToLogNextProblem = true;
++            return id;
++        }
++    }
++    if (okToLogNextProblem) {
++        RAMCLOUD_CLOG(WARNING, "PlusOneBackupSelector could not find a "
++            "suitable server in %d attempts; may need to wait for additional "
++            "servers to enlist",
++            attempts);
++        okToLogNextProblem = false;
++    }
++    return ServerId(/* Invalid */);
++}
++
++} // namespace RAMCloud
+diff --git a/src/PlusOneBackupSelector.h b/src/PlusOneBackupSelector.h
+new file mode 100644
+index 00000000..b84eca53
+--- /dev/null
++++ b/src/PlusOneBackupSelector.h
+@@ -0,0 +1,42 @@
++/* Copyright (c) 2011-2019 Stanford University
++ *
++ * Permission to use, copy, modify, and distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR(S) DISCLAIM ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL AUTHORS BE LIABLE FOR
++ * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
++ * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
++ * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++
++#ifndef RAMCLOUD_PLUSONEBACKUPSELECTOR_H
++#define RAMCLOUD_PLUSONEBACKUPSELECTOR_H
++
++#include "Common.h"
++#include "BackupSelector.h"
++
++namespace RAMCloud {
++
++/**
++ * Selects backups to store replicas starting with (masterServerId+1)%n
++ */
++class PlusOneBackupSelector : public BackupSelector {
++  PUBLIC:
++    explicit PlusOneBackupSelector(Context* context,
++                                       const ServerId* serverId,
++                                       uint32_t numReplicas,
++                                       bool allowLocalBackup);
++    ServerId selectSecondary(
++      uint32_t numBackups, const ServerId backupIds[]) override;
++
++  PRIVATE:
++    DISALLOW_COPY_AND_ASSIGN(PlusOneBackupSelector);
++};
++
++} // namespace RAMCloud
++
++#endif
+diff --git a/src/PlusOneBackupSelectorTest.cc b/src/PlusOneBackupSelectorTest.cc
+new file mode 100644
+index 00000000..4b1e44fc
+--- /dev/null
++++ b/src/PlusOneBackupSelectorTest.cc
+@@ -0,0 +1,101 @@
++/* Copyright (c) 2009-2019 Stanford University
++ *
++ * Permission to use, copy, modify, and distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR(S) DISCLAIM ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL AUTHORS BE LIABLE FOR
++ * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
++ * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
++ * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++
++#define _GLIBCXX_USE_SCHED_YIELD
++#include <thread>
++#undef _GLIBCXX_USE_SCHED_YIELD
++
++#include "TestUtil.h"
++#include "Common.h"
++#include "MockCluster.h"
++#include "PlusOneBackupSelector.h"
++#include "ServiceMask.h"
++#include "ShortMacros.h"
++
++namespace RAMCloud {
++
++struct PlusOneBackupSelectorTest : public ::testing::Test {
++    TestLog::Enable logEnabler;
++    Context context;
++    MockCluster cluster;
++    PlusOneBackupSelector* selector;
++
++    PlusOneBackupSelectorTest()
++        : logEnabler()
++        , context()
++        , cluster(&context)
++        , selector()
++    {
++        ServerConfig config = ServerConfig::forTesting();
++        config.services = {WireFormat::MASTER_SERVICE,
++                           WireFormat::ADMIN_SERVICE};
++        config.master.numReplicas = 1u;
++        config.master.usePlusOneBackup = true;
++        Server* server = cluster.addServer(config);
++        selector = static_cast<PlusOneBackupSelector*>(
++            server->master->objectManager.replicaManager.backupSelector.get());
++    }
++
++    void addDifferentHosts(std::vector<ServerId>& ids) {
++        ServerConfig config = ServerConfig::forTesting();
++        config.services = {WireFormat::BACKUP_SERVICE,
++                           WireFormat::ADMIN_SERVICE};
++        for (uint32_t i = 1; i < 10; i++) {
++            config.backup.mockSpeed = i * 10;
++            config.localLocator = format("mock:host=backup%u", i);
++            ids.push_back(cluster.addServer(config)->serverId);
++        }
++    }
++    DISALLOW_COPY_AND_ASSIGN(PlusOneBackupSelectorTest);
++};
++
++TEST_F(PlusOneBackupSelectorTest, selectSecondary) {
++    std::vector<ServerId> ids;
++    addDifferentHosts(ids);
++
++    ServerId id = selector->selectSecondary(0, NULL);
++    EXPECT_EQ(ServerId(2, 0), id);
++
++    const ServerId conflicts[] = { ids[0] };
++
++    id = selector->selectSecondary(1, &conflicts[0]);
++    EXPECT_EQ(ServerId(3, 0), id);
++}
++
++TEST_F(PlusOneBackupSelectorTest, selectSecondary_logThrottling) {
++    // First problem: generate a log message.
++    TestLog::reset();
++    ServerId id = selector->selectSecondary(0, NULL);
++    EXPECT_EQ(ServerId(), id);
++    EXPECT_EQ("selectSecondary: PlusOneBackupSelector could not find a suitable "
++            "server in 1 attempts; may need to wait for additional "
++            "servers to enlist",
++            TestLog::get());
++    EXPECT_FALSE(selector->okToLogNextProblem);
++
++    // Recurring problem: no new message.
++    TestLog::reset();
++    id = selector->selectSecondary(0, NULL);
++    EXPECT_EQ("", TestLog::get());
++
++    // Successful completion: messages reenabled.
++    std::vector<ServerId> ids;
++    addDifferentHosts(ids);
++    id = selector->selectSecondary(0, NULL);
++    EXPECT_EQ(ServerId(2, 0), id);
++    EXPECT_TRUE(selector->okToLogNextProblem);
++}
++
++} // namespace RAMCloud
+diff --git a/src/RecoverySegmentBuilderTest.cc b/src/RecoverySegmentBuilderTest.cc
+index 4e82946a..57706f3e 100644
+--- a/src/RecoverySegmentBuilderTest.cc
++++ b/src/RecoverySegmentBuilderTest.cc
+@@ -44,7 +44,7 @@ struct RecoverySegmentBuilderTest : public ::testing::Test {
+         , serverId(99, 0)
+         , serverList(&context)
+         , serverConfig(ServerConfig::forTesting())
+-        , replicaManager(&context, &serverId, 0, false, false)
++        , replicaManager(&context, &serverId, 0, false, false, false)
+         , masterTableMetadata()
+         , allocator(&serverConfig)
+         , segmentManager(&context, &serverConfig, &serverId,
+diff --git a/src/ReplicaManager.cc b/src/ReplicaManager.cc
+index 517f9a32..03f49620 100644
+--- a/src/ReplicaManager.cc
++++ b/src/ReplicaManager.cc
+@@ -13,10 +13,13 @@
+  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+  */
+ 
++#include <stdexcept>
++
+ #include "BackupClient.h"
+ #include "CycleCounter.h"
+ #include "Logger.h"
+ #include "MinCopysetsBackupSelector.h"
++#include "PlusOneBackupSelector.h"
+ #include "ShortMacros.h"
+ #include "RawMetrics.h"
+ #include "ReplicaManager.h"
+@@ -39,6 +42,9 @@ namespace RAMCloud {
+  * \param useMinCopysets
+  *      Specifies whether to use the MinCopysets replication scheme or random
+  *      replication.
++ * \param usePlusOneBackup
++ *      Specifies whether to use masterServer plus one with wraparound 
++ *      replication or random replication.
+  * \param allowLocalBackup
+  *      Specifies whether to allow replication to the local backup.
+  */
+@@ -46,6 +52,7 @@ ReplicaManager::ReplicaManager(Context* context,
+                                const ServerId* masterId,
+                                uint32_t numReplicas,
+                                bool useMinCopysets,
++                               bool usePlusOneBackup,
+                                bool allowLocalBackup)
+     : context(context)
+     , numReplicas(numReplicas)
+@@ -61,12 +68,22 @@ ReplicaManager::ReplicaManager(Context* context,
+     , failureMonitor(context, this)
+     , replicationCounter()
+     , useMinCopysets(useMinCopysets)
++    , usePlusOneBackup(usePlusOneBackup)
+     , allowLocalBackup(allowLocalBackup)
+ {
++    if (useMinCopysets && usePlusOneBackup) {
++        throw std::invalid_argument(
++            "Can only use one of min-copysets and plus-one backup strategies, "
++            "but both were specified.");
++    }
+     if (useMinCopysets) {
+         backupSelector.reset(new MinCopysetsBackupSelector(context, masterId,
+                                                            numReplicas,
+                                                            allowLocalBackup));
++    } else if (usePlusOneBackup) {
++        backupSelector.reset(new PlusOneBackupSelector(context, masterId,
++                                                       numReplicas,
++                                                       allowLocalBackup));
+     } else {
+         backupSelector.reset(new BackupSelector(context, masterId,
+                                                 numReplicas, allowLocalBackup));
+diff --git a/src/ReplicaManager.h b/src/ReplicaManager.h
+index fd212e9a..b5c1830c 100644
+--- a/src/ReplicaManager.h
++++ b/src/ReplicaManager.h
+@@ -68,6 +68,7 @@ class ReplicaManager
+                    const ServerId* masterId,
+                    uint32_t numReplicas,
+                    bool useMinCopysets,
++                   bool usePlusOneBackup,
+                    bool allowLocalBackup);
+     ~ReplicaManager();
+ 
+@@ -195,6 +196,12 @@ class ReplicaManager
+      */
+     bool useMinCopysets;
+ 
++    /**
++     * Specifies whether to use the masterServerId plus one with wraparound 
++     * replication scheme.
++     */
++    bool usePlusOneBackup;
++
+     /**
+      * Specifies whether to allow replication to local backup.
+      */
+diff --git a/src/ReplicaManagerTest.cc b/src/ReplicaManagerTest.cc
+index 6646b001..f89756fc 100644
+--- a/src/ReplicaManagerTest.cc
++++ b/src/ReplicaManagerTest.cc
+@@ -60,7 +60,7 @@ struct ReplicaManagerTest : public ::testing::Test {
+         // anymore.
+         serverId = CoordinatorClient::enlistServer(&context, 0, {},
+             {WireFormat::MASTER_SERVICE}, "", 0);
+-        mgr.construct(&context, &serverId, 2, false, false);
++        mgr.construct(&context, &serverId, 2, false, false, false);
+         cluster.coordinatorContext.coordinatorServerList->sync();
+     }
+ 
+diff --git a/src/SegmentManagerTest.cc b/src/SegmentManagerTest.cc
+index a030eae9..83ef85d0 100644
+--- a/src/SegmentManagerTest.cc
++++ b/src/SegmentManagerTest.cc
+@@ -46,7 +46,7 @@ class SegmentManagerTest : public ::testing::Test {
+           serverId(ServerId(57, 0)),
+           serverList(&context),
+           serverConfig(ServerConfig::forTesting()),
+-          replicaManager(&context, &serverId, 0, false, false),
++          replicaManager(&context, &serverId, 0, false, false, false),
+           masterTableMetadata(),
+           allocator(&serverConfig),
+           segmentManager(&context, &serverConfig, &serverId,
+diff --git a/src/ServerConfig.h b/src/ServerConfig.h
+index dd2f81b3..5ecd77bc 100644
+--- a/src/ServerConfig.h
++++ b/src/ServerConfig.h
+@@ -238,6 +238,7 @@ struct ServerConfig {
+             , numReplicas(0)
+             , useHugepages(false)
+             , useMinCopysets(false)
++            , usePlusOneBackup(false)
+             , allowLocalBackup(false)
+         {}
+ 
+@@ -258,6 +259,7 @@ struct ServerConfig {
+             , numReplicas()
+             , useHugepages()
+             , useMinCopysets()
++            , usePlusOneBackup()
+             , allowLocalBackup()
+         {}
+ 
+@@ -278,6 +280,7 @@ struct ServerConfig {
+             config.set_num_replicas(numReplicas);
+             config.set_use_hugepages(useHugepages);
+             config.set_use_mincopysets(useMinCopysets);
++            config.set_use_plusonebackup(usePlusOneBackup);
+             config.set_use_local_backup(allowLocalBackup);
+         }
+ 
+@@ -299,6 +302,7 @@ struct ServerConfig {
+             numReplicas = config.num_replicas();
+             useHugepages = config.use_hugepages();
+             useMinCopysets = config.use_mincopysets();
++            usePlusOneBackup = config.use_plusonebackup();
+             allowLocalBackup = config.use_local_backup();
+         }
+ 
+@@ -345,6 +349,10 @@ struct ServerConfig {
+         /// replication.
+         bool useMinCopysets;
+ 
++        /// Specifies whether to use masterServerId plus one with wraparound 
++        /// or random replication for backupServerId.
++        bool usePlusOneBackup;
++
+         /// If true, allow replication to local backup.
+         bool allowLocalBackup;
+     } master;
+diff --git a/src/ServerConfig.proto b/src/ServerConfig.proto
+index c61c7bc9..5e9df178 100644
+--- a/src/ServerConfig.proto
++++ b/src/ServerConfig.proto
+@@ -94,6 +94,10 @@ message ServerConfig {
+ 
+         /// If true, allow replication to local backup.
+         required bool use_local_backup = 12;
++
++        /// Specifies whether to use masterServerId plus one with wraparound 
++        /// or random replication for backupServerId.
++        required bool use_plusonebackup = 13;
+     }
+ 
+     /// The server's MasterService configuration, if it is running one.
+diff --git a/src/ServerMain.cc b/src/ServerMain.cc
+index 1ffe6e2c..7e480656 100644
+--- a/src/ServerMain.cc
++++ b/src/ServerMain.cc
+@@ -237,6 +237,11 @@ main(int argc, char *argv[])
+              ProgramOptions::value<bool>(&config.master.useMinCopysets)->
+                 default_value(false),
+              "Whether to use MinCopysets or random replication")
++            ("usePlusOneBackup",
++             ProgramOptions::value<bool>(&config.master.usePlusOneBackup)->
++                default_value(false),
++             "Whether to use (masterServerId+1)modulo n or random "
++             "replication for backupServerId")
+             ("writeCostThreshold,w",
+              ProgramOptions::value<uint32_t>(
+                 &config.master.cleanerWriteCostThreshold)->default_value(8),
+diff --git a/src/ServerTracker.h b/src/ServerTracker.h
+index 1fc5b1e3..49fe7e72 100644
+--- a/src/ServerTracker.h
++++ b/src/ServerTracker.h
+@@ -396,6 +396,34 @@ class ServerTracker : public ServerTrackerInterface {
+         }
+     }
+ 
++    /**
++     * Deterministically obtain the ServerId at serverList[index], but only
++     * if index is valid, the serverId is valid, the server is up, and it
++     * has the specified service. We return invalid id otherwise.
++     * 
++     * \param index
++     *      The index of serverList[] we want returned.
++     * \param service
++     *      Restricts returned ServerId to a server that was known by this tracker
++     *      to be running an instance of a specific service type.
++     * \return
++     *      The ServerId of a server that was known by this tracker to be
++     *      running an instance of the requested service type, provided the
++     *      criteria passes.
++     */
++    ServerId
++    getServerIdAtIndexWithService(uint32_t index, WireFormat::ServiceType service) {
++        if (serverList.size() > 0 &&
++            index < serverList.size() &&
++            index != lastRemovedIndex &&
++            serverList[index].server.serverId.isValid() &&
++            serverList[index].server.status == ServerStatus::UP &&
++            serverList[index].server.services.has(service)) {
++            return serverList[index].server.serverId;
++        }
++        return ServerId(/* invalid id */);
++    }
++
+     /**
+      * Obtain a random ServerId stored in this tracker which is running a
+      * particular service.
+diff --git a/src/ServerTrackerTest.cc b/src/ServerTrackerTest.cc
+index a62c1a7c..f796d604 100644
+--- a/src/ServerTrackerTest.cc
++++ b/src/ServerTrackerTest.cc
+@@ -380,6 +380,35 @@ TEST_F(ServerTrackerTest, getChange_removedButServerNeverAdded) {
+     EXPECT_EQ(0u, tr.changes.size());
+ }
+ 
++TEST_F(ServerTrackerTest, getServerIdAtIndexWithService) {
++    Logger::get().setLogLevels(SILENT_LOG_LEVEL);
++
++    ServerDetails server;
++    ServerChangeEvent event;
++
++    EXPECT_FALSE(tr.getServerIdAtIndexWithService(
++        1, WireFormat::BACKUP_SERVICE).isValid());
++
++    upEvent(ServerId(1, 0));
++    EXPECT_FALSE(tr.getServerIdAtIndexWithService(
++        1, WireFormat::BACKUP_SERVICE).isValid());
++    EXPECT_TRUE(tr.getChange(server, event));
++
++    EXPECT_EQ(ServerId(1, 0),
++                  tr.getServerIdAtIndexWithService(1, WireFormat::BACKUP_SERVICE));
++    // No host available with this service bit set.
++    EXPECT_EQ(ServerId(),
++                  tr.getServerIdAtIndexWithService(1, WireFormat::MASTER_SERVICE));
++
++    // Ensure looping over empty list terminates.
++    removedEvent(ServerId(1, 0));
++    while (tr.getChange(server, event)) {
++        // Do nothing; just process all events.
++    }
++    EXPECT_FALSE(tr.getServerIdAtIndexWithService(
++        1, WireFormat::BACKUP_SERVICE).isValid());
++}
++
+ TEST_F(ServerTrackerTest, getRandomServerIdWithService) {
+     Logger::get().setLogLevels(SILENT_LOG_LEVEL);
+ 
+diff --git a/src/SideLogTest.cc b/src/SideLogTest.cc
+index b3c07965..ef158323 100644
+--- a/src/SideLogTest.cc
++++ b/src/SideLogTest.cc
+@@ -57,7 +57,7 @@ class SideLogTest : public ::testing::Test {
+           serverId(ServerId(57, 0)),
+           serverList(&context),
+           serverConfig(ServerConfig::forTesting()),
+-          replicaManager(&context, &serverId, 0, false, false),
++          replicaManager(&context, &serverId, 0, false, false, false),
+           masterTableMetadata(),
+           allocator(&serverConfig),
+           segmentManager(&context, &serverConfig, &serverId,
