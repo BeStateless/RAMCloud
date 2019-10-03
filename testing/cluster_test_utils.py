@@ -135,6 +135,27 @@ class ClusterTest:
                                                                  self.ramcloud_network)
         self.rc_client.connect(external_storage, 'main')
 
+    def buildServerIdMap(self):
+        zk_client = get_zookeeper_client(self.ensemble)
+        zk_config = ZkTableConfiguration(
+                outfile = "servers.out", 
+                zk_path = "/ramcloud/main/servers", 
+                proto = ServerListEntry_pb2.ServerListEntry(), 
+                is_leaf = False)
+        server_protos = zk_config.getTable(zk_client)
+        self.server_id_to_host = {s.server_id : get_host(s.service_locator) for s in server_protos}
+        self.host_to_server_id = {get_host(s.service_locator) : s.server_id for s in server_protos}
+        zk_client.stop()
+
+    # This method assumes we're running rc-server with the usePlusOneBackup flag set to true.
+    # We might modify this method in future to account for downed server instances.
+    def getPlusOneBackupId(self, master_server_id):
+        n = len(self.node_containers)
+        backup_server_id = master_server_id + 1
+        if (backup_server_id > n):
+            backup_server_id = 1
+        return backup_server_id
+
     def createTestValue(self):
         self.rc_client.create_table('test')
         self.table = self.rc_client.get_table_id('test')
@@ -237,6 +258,25 @@ class ZkTableConfiguration:
         self.proto = proto
         self.is_leaf = is_leaf
     
+    def getTable(self, zk_client):
+        # TODO: Find a way to combine this method and dump(). This is non-intuitive at moment.
+        if not zk_client.exists(self.zk_path):
+            return None
+        zk_paths = [self.zk_path]
+        if not self.is_leaf:
+            zk_paths = ["%s/%s" % (self.zk_path, child) for child in zk_client.get_children(self.zk_path)]
+        items = []
+        for zk_path in zk_paths:
+            data = zk_client.get(zk_path)[0]
+            item = ""
+            if type(self.proto) is str:
+                item = data
+            else:
+                item = copy.deepcopy(self.proto)
+                item.ParseFromString(data)
+            items.append(item)
+        return items
+
     def dump(self, outpath, zk_client):
         # If the zk_path doesn't exist, then don't output anything. That's not an error.
         # "/ramcloud/main/tableManager" doesn't always exist, for example.
