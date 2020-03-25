@@ -168,15 +168,15 @@ class ClusterTest:
         for (_, container) in self.node_containers.items():
             outfile = '%s/%s.out' % (path, container.name)
             f = open(outfile, 'w')
-            # make a stream of output logs to iterate and write to file 
-            # (uses less memory than storing the container log as a string), 
-            # and don't keep the stream open for new logs, since we want 
-            # to get thru outputting whatever we got for this container 
+            # make a stream of output logs to iterate and write to file
+            # (uses less memory than storing the container log as a string),
+            # and don't keep the stream open for new logs, since we want
+            # to get thru outputting whatever we got for this container
             # before doing same for next container.
             for line in container.logs(stream=True, follow=False):
                 f.write(line)
             f.close()
-    
+
     # NOTE: This method runs slowly.
     def outputBackups(self, outpath="/src/tmp", infile="/var/tmp/backup.log"):
         if not os.path.exists(outpath):
@@ -257,7 +257,7 @@ class ZkTableConfiguration:
         self.zk_path = zk_path
         self.proto = proto
         self.is_leaf = is_leaf
-    
+
     def getTable(self, zk_client):
         # TODO: Find a way to combine this method and dump(). This is non-intuitive at moment.
         if not zk_client.exists(self.zk_path):

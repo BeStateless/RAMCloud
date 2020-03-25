@@ -27,6 +27,7 @@ RUN apt-get update \
       python-backports.ssl-match-hostname \
       software-properties-common \
       stgit \
+      vim \
  && rm -rf /var/lib/apt/lists/* \
  && pip install pipenv \
  && pipenv install --system \

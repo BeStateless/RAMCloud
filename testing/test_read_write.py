@@ -18,6 +18,7 @@ class TestReadWrite(unittest.TestCase):
         x.createTestValue()
 
     def tearDown(self):
+        x.outputLogs()
         x.tearDown()
 
     @timeout(ten_minutes)
