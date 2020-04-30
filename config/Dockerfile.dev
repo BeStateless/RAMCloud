@@ -5,6 +5,7 @@ WORKDIR /src
 COPY config/Pipfile config/Pipfile.lock /src/
 RUN apt-get update \
  && apt-get install --yes \
+      2to3 \
       apt-transport-https \
       build-essential \
       ca-certificates \
@@ -22,14 +23,14 @@ RUN apt-get update \
       libzookeeper-mt-dev \
       procps \
       protobuf-compiler \
-      python-pip \
+      python3-pip \
       # Install this python package to work around https://github.com/docker/docker-py/issues/1502
       python-backports.ssl-match-hostname \
       software-properties-common \
       stgit \
       vim \
  && rm -rf /var/lib/apt/lists/* \
- && pip install pipenv \
+ && pip3 install pipenv \
  && pipenv install --system \
  && rm Pipfile* \
  && curl -fsSL https://download.docker.com/linux/debian/gpg | apt-key add - \
@@ -38,5 +39,5 @@ RUN apt-get update \
  && apt-get install --yes \
       docker-ce \
  && rm -rf /var/lib/apt/lists/*
-ENV PYTHONPATH=/src/RAMCloud/scripts:/src/RAMCloud/bindings/python:/src/testing
+ENV PYTHONPATH=/src/RAMCloud/bindings/python:/src/testing
 ENV LD_LIBRARY_PATH=/src/RAMCloud/install/lib

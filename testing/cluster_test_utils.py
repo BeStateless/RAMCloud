@@ -43,15 +43,15 @@ def get_zookeeper_client(ensemble, read_only=True):
 
 def get_host(locator):
     # locator should be in format 'k1=v1,k2=v2,....,kn=vn'
-    args = filter(lambda x: x.find('=') >= 0, locator.split(','))
-    arg_map = {k : v for (k,v) in map(lambda a: a.split('=', 2), args)}
+    args = [x for x in locator.split(',') if x.find('=') >= 0]
+    arg_map = {k : v for (k,v) in [a.split('=', 2) for a in args]}
     return arg_map['basic+udp:host']
 
 def external_storage_string(ensemble):
-    return ','.join(['{}:2181'.format(ip) for (_, ip) in ensemble.items()])
+    return ','.join(['{}:2181'.format(ip) for (_, ip) in list(ensemble.items())])
 
 def ensemble_servers_string(ensemble):
-    return ' '.join(['server.{}={}:2888:3888;2181'.format(zkid, ip) for (zkid, ip) in ensemble.items()])
+    return ' '.join(['server.{}={}:2888:3888;2181'.format(zkid, ip) for (zkid, ip) in list(ensemble.items())])
 
 def get_node_image():
     logger.info('Building ramcloud-test-node image...')
@@ -110,7 +110,6 @@ def launch_node(cluster_name, hostname, zk_servers, external_storage, zkid, ip, 
 # < Do some stuff >
 # >>> x.outputLogs()
 # >>> x.zkDump()
-# < You can also do x.outputBackups(), but that's really slow, and be sure to remove the tar files when you're done >
 # < Check output files in /src/tmp >
 # >>> x.tearDown()
 class ClusterTest:
@@ -120,10 +119,10 @@ class ClusterTest:
         self.node_image = get_node_image()
         self.rc_client = ramcloud.RAMCloud()
         self.node_containers = {}
-        self.ensemble = {i: '10.0.1.{}'.format(i) for i in xrange(1, num_nodes + 1)}
+        self.ensemble = {i: '10.0.1.{}'.format(i) for i in range(1, num_nodes + 1)}
         zk_servers = ensemble_servers_string(self.ensemble)
         external_storage = 'zk:' + external_storage_string(self.ensemble)
-        for i in xrange(1, num_nodes + 1):
+        for i in range(1, num_nodes + 1):
             hostname = 'ramcloud-node-{}'.format(i)
             self.node_containers[self.ensemble[i]] = launch_node('main',
                                                                  hostname,
@@ -165,9 +164,9 @@ class ClusterTest:
     def outputLogs(self, path="/src/tmp"):
         if not os.path.exists(path):
             os.makedirs(path)
-        for (_, container) in self.node_containers.items():
+        for (_, container) in list(self.node_containers.items()):
             outfile = '%s/%s.out' % (path, container.name)
-            f = open(outfile, 'w')
+            f = open(outfile, 'wb')
             # make a stream of output logs to iterate and write to file
             # (uses less memory than storing the container log as a string),
             # and don't keep the stream open for new logs, since we want
@@ -175,18 +174,6 @@ class ClusterTest:
             # before doing same for next container.
             for line in container.logs(stream=True, follow=False):
                 f.write(line)
-            f.close()
-
-    # NOTE: This method runs slowly.
-    def outputBackups(self, outpath="/src/tmp", infile="/var/tmp/backup.log"):
-        if not os.path.exists(outpath):
-            os.makedirs(outpath)
-        for (_, container) in self.node_containers.items():
-            outfile = '%s/%s.backup.tar' % (outpath, container.name)
-            f = open(outfile, 'wb')
-            bits, stat = container.get_archive(infile)
-            for chunk in bits:
-                f.write(chunk)
             f.close()
 
     def zkDump(self, path="/src/tmp", zk_client=None, stop_zk=True):
@@ -247,7 +234,7 @@ class ClusterTest:
             zk_client.stop()
 
     def tearDown(self):
-        for (_, container) in self.node_containers.items():
+        for (_, container) in list(self.node_containers.items()):
             container.remove(force=True)
         self.ramcloud_network.remove()
 
@@ -291,7 +278,7 @@ class ZkTableConfiguration:
             data = zk_client.get(zk_path)[0]
             outstring = ""
             if type(self.proto) is str:
-                outstring = data
+                outstring = data.decode()
             else:
                 outproto = copy.deepcopy(self.proto)
                 outproto.ParseFromString(data)

@@ -1,0 +1,1038 @@
+Migrates bindings/python to python3
+
+From: nobody <nobody@nowhere>
+
+
+---
+ bindings/python/oidres.py               |    4 +
+ bindings/python/ramcloud.py             |   42 +++++------
+ bindings/python/retries.py              |    6 +-
+ bindings/python/stresstest_bank.py      |   30 ++++----
+ bindings/python/stresstest_increment.py |   24 +++---
+ bindings/python/test_oidres.py          |    4 +
+ bindings/python/test_retries.py         |   46 ++++++------
+ bindings/python/test_testutil.py        |   34 ++++-----
+ bindings/python/test_txramcloud.py      |  124 ++++++++++++++++---------------
+ bindings/python/testutil.py             |   16 ++--
+ bindings/python/txramcloud.py           |   28 ++++---
+ 11 files changed, 179 insertions(+), 179 deletions(-)
+
+diff --git a/bindings/python/oidres.py b/bindings/python/oidres.py
+index 3be5bda1..af4b3aa1 100644
+--- a/bindings/python/oidres.py
++++ b/bindings/python/oidres.py
+@@ -89,7 +89,7 @@ class LazyOID:
+         @rtype: int
+         """
+         if self._oid is None:
+-            self._oid = self._oidres.next()
++            self._oid = next(self._oidres)
+         return self._oid
+ 
+ class OIDRes:
+@@ -192,7 +192,7 @@ class OIDRes:
+                 except (ramcloud.NoObjectError, ramcloud.VersionError):
+                     retry.later()
+ 
+-        self._reserved = range(next_avail + self.delta - 1, next_avail, -1)
++        self._reserved = list(range(next_avail + self.delta - 1, next_avail, -1))
+         return next_avail
+ 
+     def reserve_lazily(self):
+diff --git a/bindings/python/ramcloud.py b/bindings/python/ramcloud.py
+index 4d0ce497..81b0a12d 100644
+--- a/bindings/python/ramcloud.py
++++ b/bindings/python/ramcloud.py
+@@ -71,7 +71,7 @@ def load_so():
+         raise not_found
+     try:
+         so = ctypes.cdll.LoadLibrary(path)
+-    except OSError, e:
++    except OSError as e:
+         if 'No such file or directory' in str(e):
+             raise not_found
+         else:
+@@ -104,7 +104,7 @@ def load_so():
+     # argument types aliased to their names for sanity
+     # alphabetical order
+     address             = ctypes.c_char_p
+-    buf                 = ctypes.c_void_p
++    buf                 = ctypes.c_char_p
+     client              = ctypes.c_void_p
+     key                 = ctypes.c_char_p
+     keyLength           = ctypes.c_uint16
+@@ -180,10 +180,10 @@ def _ctype_copy(addr, var, width):
+     return addr + width
+ 
+ def get_key(id):
++    s_id = id
+     if type(id) is int:
+-        return str(id)
+-    else:
+-        return id
++        s_id = str(id)
++    return s_id.encode()
+ 
+ def get_keyLength(id):
+     if type(id) is int:
+@@ -232,7 +232,7 @@ class RAMCloud(object):
+ 
+     def connect(self, serverLocator='fast+udp:host=127.0.0.1,port=12242',
+                 clusterName='main'):
+-        s = so.rc_connect(serverLocator, clusterName,
++        s = so.rc_connect(serverLocator.encode(), clusterName.encode(),
+                           ctypes.byref(self.client))
+         self.handle_error(s)
+ 
+@@ -241,7 +241,7 @@ class RAMCloud(object):
+         return self.write_rr(table_id, id, data, reject_rules)
+ 
+     def create_table(self, name, serverSpan = 1):
+-        s = so.rc_createTable(self.client, name, serverSpan)
++        s = so.rc_createTable(self.client, name.encode(), serverSpan)
+         self.handle_error(s)
+ 
+     def delete(self, table_id, id, want_version=None):
+@@ -260,18 +260,18 @@ class RAMCloud(object):
+         return got_version.value
+ 
+     def drop_table(self, name):
+-        s = so.rc_dropTable(self.client, name)
++        s = so.rc_dropTable(self.client, name.encode())
+         self.handle_error(s)
+ 
+     def get_table_id(self, name):
+         handle = ctypes.c_uint64()
+-        s = so.rc_getTableId(self.client, name, ctypes.byref(handle))
++        s = so.rc_getTableId(self.client, name.encode(), ctypes.byref(handle))
+         self.handle_error(s)
+         return handle.value
+ 
+     def ping(self, serviceLocator, nonce, nanoseconds):
+         result = ctypes.c_uint64();
+-        s = so.rc_ping(self.client, serviceLocator, nonce, nanoseconds,
++        s = so.rc_ping(self.client, serviceLocator.encode(), nonce, nanoseconds,
+                        ctypes.byref(result))
+         self.handle_error(s)
+         return result
+@@ -292,10 +292,10 @@ class RAMCloud(object):
+         self.hook()
+         s = so.rc_read(self.client, table_id, get_key(id), get_keyLength(id),
+                        ctypes.byref(reject_rules),
+-                       ctypes.byref(got_version), ctypes.byref(buf), max_length,
++                       ctypes.byref(got_version), buf, max_length,
+                        ctypes.byref(actual_length))
+         self.handle_error(s, got_version.value)
+-        return (buf.raw[0:actual_length.value], got_version.value)
++        return (buf.raw[0:actual_length.value].decode(), got_version.value)
+ 
+     def update(self, table_id, id, data, want_version=None):
+         if want_version:
+@@ -316,7 +316,7 @@ class RAMCloud(object):
+         got_version = ctypes.c_uint64()
+         self.hook()
+         s = so.rc_write(self.client, table_id, get_key(id), get_keyLength(id),
+-                        data, len(data),
++                        data.encode(), len(data),
+                         ctypes.byref(reject_rules), ctypes.byref(got_version))
+         self.handle_error(s, got_version.value)
+         return got_version.value
+@@ -348,7 +348,7 @@ class RAMCloud(object):
+                                               get_keyLength(id),
+                                               buffer, max_len)
+         self.handle_error(s)
+-        return buffer.value
++        return buffer.value.decode()
+ 
+     def testing_set_runtime_option(self, option, value):
+         so.rc_set_runtime_option(self.client, option, value)
+@@ -362,21 +362,21 @@ class RAMCloud(object):
+ def main():
+     r = RAMCloud()
+     r.connect()
+-    print "Client: 0x%x" % r.client.value
++    print("Client: 0x%x" % r.client.value)
+     r.ping()
+ 
+     r.create_table("test")
+-    print "Created table 'test'",
++    print("Created table 'test'", end=' ')
+     table = r.get_table_id("test")
+-    print "with id %s" % table
++    print("with id %s" % table)
+ 
+     r.create(table, 0, "Hello, World, from Python")
+-    print "Created object 0 in table"
++    print("Created object 0 in table")
+     value, got_version = r.read(table, 0)
+-    print value
++    print(value)
+     id = r.insert(table, "test")
+-    print "Inserted value and got back id %d" % id
+-    print "Value read back: %s" % r.read(table, id)[0]
++    print("Inserted value and got back id %d" % id)
++    print("Value read back: %s" % r.read(table, id)[0])
+     r.update(table, id, "test")
+ 
+     bs = "binary\00safe?"
+diff --git a/bindings/python/retries.py b/bindings/python/retries.py
+index 59c3cc0f..47b6f737 100644
+--- a/bindings/python/retries.py
++++ b/bindings/python/retries.py
+@@ -62,7 +62,7 @@ class ImmediateRetry(object):
+         """
+         return self
+ 
+-    def next(self):
++    def __next__(self):
+         """Return this object if there's another iteration scheduled.
+ 
+         @rtype: L{ImmediateRetry}
+@@ -120,14 +120,14 @@ class BackoffRetry(ImmediateRetry):
+         else:
+             self._sleep_func = time.sleep
+ 
+-    def next(self):
++    def __next__(self):
+         """Optionally sleep, then return this object if there's another
+         iteration scheduled."""
+ 
+         ImmediateRetry.next(self)
+         if self._wait_next:
+             try:
+-                self._wait_time = self._wait_time_iter.next()
++                self._wait_time = next(self._wait_time_iter)
+             except StopIteration:
+                 pass
+             self._sleep_func(self._wait_time)
+diff --git a/bindings/python/stresstest_bank.py b/bindings/python/stresstest_bank.py
+index 5c12f47a..dd8f7bd9 100755
+--- a/bindings/python/stresstest_bank.py
++++ b/bindings/python/stresstest_bank.py
+@@ -92,15 +92,15 @@ class Test(object):
+         try:
+             while True:
+                 if i % 10**6 == 0:
+-                    print "PID %d: continuing after %s" % (os.getpid(),
+-                          Stats.to_str(self.local_stats))
++                    print("PID %d: continuing after %s" % (os.getpid(),
++                          Stats.to_str(self.local_stats)))
+ 
+                 accts = self.choose_accts()
+ 
+                 for retry in RetryStrategy():
+                     if die.value:
+-                        print "PID %d: done after %s" % (os.getpid(),
+-                              Stats.to_str(self.local_stats))
++                        print("PID %d: done after %s" % (os.getpid(),
++                              Stats.to_str(self.local_stats)))
+                         return
+                     try:
+                         for oid in accts:
+@@ -111,8 +111,8 @@ class Test(object):
+                         if not self.algo(accts):
+                             retry.later()
+                     except BreakException:
+-                        print "PID %d: crash after %s" % (os.getpid(),
+-                              Stats.to_str(self.local_stats))
++                        print("PID %d: crash after %s" % (os.getpid(),
++                              Stats.to_str(self.local_stats)))
+                         self.local_stats[Stats.CRASHES] += 1
+                         for oid in self.cache:
+                             self.cache[oid] = None
+@@ -153,16 +153,16 @@ class Test(object):
+             mt[(self.table, oid)] = txramcloud.MTWrite(str(value), rr)
+         try:
+             result = self.txrc.mt_commit(mt)
+-        except txramcloud.TxRAMCloud.TransactionRejected, e:
+-            for ((table, oid), reason) in e.reasons.items():
++        except txramcloud.TxRAMCloud.TransactionRejected as e:
++            for ((table, oid), reason) in list(e.reasons.items()):
+                 self.cache[oid] = None
+             self.local_stats[Stats.ABORTS] += 1
+             return False
+-        except txramcloud.TxRAMCloud.TransactionExpired, e:
++        except txramcloud.TxRAMCloud.TransactionExpired as e:
+             self.local_stats[Stats.ABORTS] += 1
+             return False
+         else:
+-            for ((table, oid), version) in result.items():
++            for ((table, oid), version) in list(result.items()):
+                 self.cache[oid] = (new_values[oid], version)
+             self.local_stats[Stats.INCREMENTS] += 1
+             return True
+@@ -197,7 +197,7 @@ if __name__ == '__main__':
+     r.create_table("test")
+     table = r.get_table_id("test")
+ 
+-    oids = range(options.num_objects)
++    oids = list(range(options.num_objects))
+ 
+     for oid in oids:
+         r.create(table, oid, str(0))
+@@ -224,14 +224,14 @@ if __name__ == '__main__':
+             p.join()
+     end = time.time()
+ 
+-    print "wall time: %0.02fs" % (end - start)
+-    print "stats:", Stats.to_str(stats[:])
++    print("wall time: %0.02fs" % (end - start))
++    print("stats:", Stats.to_str(stats[:]))
+     sum = 0
+     for oid in oids:
+         blob, version = r.read(table, oid)
+         value = int(blob)
+         sum += value
+-        print 'oid %d: value=%d, version=%d' % (oid, value, version)
+-    print 'sum: %d' % sum
++        print('oid %d: value=%d, version=%d' % (oid, value, version))
++    print('sum: %d' % sum)
+     assert sum == 0
+ 
+diff --git a/bindings/python/stresstest_increment.py b/bindings/python/stresstest_increment.py
+index e4e39c1a..8fd1cdc7 100755
+--- a/bindings/python/stresstest_increment.py
++++ b/bindings/python/stresstest_increment.py
+@@ -107,12 +107,12 @@ class Test(object):
+                         retry.later()
+                 i += 1
+         except BreakException:
+-            print "PID %d: crash after %s" % (os.getpid(),
+-                                              Stats.to_str(self.local_stats))
++            print("PID %d: crash after %s" % (os.getpid(),
++                                              Stats.to_str(self.local_stats)))
+             self.local_stats[Stats.CRASHES] += 1
+         else:
+-            print "PID %d: done after %s" % (os.getpid(),
+-                                             Stats.to_str(self.local_stats))
++            print("PID %d: done after %s" % (os.getpid(),
++                                             Stats.to_str(self.local_stats)))
+         finally:
+             # update global stats
+             for i, v in enumerate(self.local_stats):
+@@ -143,16 +143,16 @@ class TestMT(Test):
+             mt[(self.table, oid)] = txramcloud.MTWrite(str(value + 1), rr)
+         try:
+             result = self.txrc.mt_commit(mt)
+-        except txramcloud.TxRAMCloud.TransactionRejected, e:
+-            for ((table, oid), reason) in e.reasons.items():
++        except txramcloud.TxRAMCloud.TransactionRejected as e:
++            for ((table, oid), reason) in list(e.reasons.items()):
+                 self.cache[oid] = None
+             self.local_stats[Stats.ABORTS] += 1
+             return False
+-        except txramcloud.TxRAMCloud.TransactionExpired, e:
++        except txramcloud.TxRAMCloud.TransactionExpired as e:
+             self.local_stats[Stats.ABORTS] += 1
+             return False
+         else:
+-            for ((table, oid), version) in result.items():
++            for ((table, oid), version) in list(result.items()):
+                 self.cache[oid] = (self.cache[oid][0] + 1, version)
+             self.local_stats[Stats.INCREMENTS] += 1
+             return True
+@@ -190,7 +190,7 @@ if __name__ == '__main__':
+     r.create_table("test")
+     table = r.get_table_id("test")
+ 
+-    oids = range(options.num_objects)
++    oids = list(range(options.num_objects))
+ 
+     for oid in oids:
+         r.create(table, oid, str(0))
+@@ -221,10 +221,10 @@ if __name__ == '__main__':
+             p.join()
+     end = time.time()
+ 
+-    print "wall time: %0.02fs" % (end - start)
+-    print "stats:", Stats.to_str(stats[:])
++    print("wall time: %0.02fs" % (end - start))
++    print("stats:", Stats.to_str(stats[:]))
+     for oid in oids:
+         blob, version = r.read(table, oid)
+         value = int(blob)
+-        print 'oid %d: value=%d, version=%d' % (oid, value, version)
++        print('oid %d: value=%d, version=%d' % (oid, value, version))
+ 
+diff --git a/bindings/python/test_oidres.py b/bindings/python/test_oidres.py
+index 76b895a6..c86b85cd 100755
+--- a/bindings/python/test_oidres.py
++++ b/bindings/python/test_oidres.py
+@@ -18,7 +18,7 @@
+ 
+ """
+ 
+-from __future__ import with_statement
++
+ 
+ import unittest
+ 
+@@ -97,7 +97,7 @@ class TestOIDRes(unittest.TestCase):
+                 self.assertEqual(res.next(retry_strategy), i + 70)
+                 retry_strategy.done()
+                 self.assertEqual(counter.count, 1)
+-            self.assertEqual(res.next(), 900)
++            self.assertEqual(next(res), 900)
+ 
+     def test_next_no_object(self):
+         """Test that L{oidres.OIDRes.next} works when there is no object."""
+diff --git a/bindings/python/test_retries.py b/bindings/python/test_retries.py
+index 8277566d..1c6b060c 100755
+--- a/bindings/python/test_retries.py
++++ b/bindings/python/test_retries.py
+@@ -18,7 +18,7 @@
+ 
+ """
+ 
+-from __future__ import with_statement
++
+ 
+ import unittest
+ import random
+@@ -61,7 +61,7 @@ class TestBackoffRetry(unittest.TestCase):
+     def sleep_func(self, wait_time_iter):
+         def sf(time):
+             try:
+-                expected = wait_time_iter.next()
++                expected = next(wait_time_iter)
+             except StopIteration:
+                 self.fail('sleep func got StopIteration')
+             self.assertEqual(time, expected)
+@@ -154,22 +154,22 @@ class TestBackoffRetry(unittest.TestCase):
+ class TestExponentialBackoff(unittest.TestCase):
+     def test_normal(self):
+         wti = retries.ExponentialBackoff(0.3, 6.8, 90.1)._wait_time_iter
+-        self.assertAlmostEqual(wti.next(), 0.3)
+-        self.assertAlmostEqual(wti.next(), 0.3 * 6.8)
+-        self.assertAlmostEqual(wti.next(), 0.3 * 6.8 ** 2)
+-        self.assertAlmostEqual(wti.next(), 90.1)
+-        self.assertRaises(StopIteration, wti.next)
++        self.assertAlmostEqual(next(wti), 0.3)
++        self.assertAlmostEqual(next(wti), 0.3 * 6.8)
++        self.assertAlmostEqual(next(wti), 0.3 * 6.8 ** 2)
++        self.assertAlmostEqual(next(wti), 90.1)
++        self.assertRaises(StopIteration, wti.__next__)
+ 
+     def test_low_limit(self):
+         wti = retries.ExponentialBackoff(0.3, 6.8, 0.0)._wait_time_iter
+-        self.assertAlmostEqual(wti.next(), 0.0)
+-        self.assertRaises(StopIteration, wti.next)
++        self.assertAlmostEqual(next(wti), 0.0)
++        self.assertRaises(StopIteration, wti.__next__)
+ 
+     def test_high_scale(self):
+         wti = retries.ExponentialBackoff(2.0, 6.8, 3.0)._wait_time_iter
+-        self.assertAlmostEqual(wti.next(), 2.0)
+-        self.assertAlmostEqual(wti.next(), 3.0)
+-        self.assertRaises(StopIteration, wti.next)
++        self.assertAlmostEqual(next(wti), 2.0)
++        self.assertAlmostEqual(next(wti), 3.0)
++        self.assertRaises(StopIteration, wti.__next__)
+ 
+ class TestFuzzyExponentialBackoff(unittest.TestCase):
+     def setUp(self):
+@@ -180,24 +180,24 @@ class TestFuzzyExponentialBackoff(unittest.TestCase):
+     def test_normal(self):
+         wti = retries.FuzzyExponentialBackoff(0.3, 6.8, 8.5,
+                                               90.1)._wait_time_iter
+-        self.assertAlmostEqual(wti.next(), 0.3)
+-        self.assertAlmostEqual(wti.next(), 0.3 * self.rand[0])
+-        self.assertAlmostEqual(wti.next(), 0.3 * self.rand[0] * self.rand[1])
+-        self.assertAlmostEqual(wti.next(), 90.1)
+-        self.assertRaises(StopIteration, wti.next)
++        self.assertAlmostEqual(next(wti), 0.3)
++        self.assertAlmostEqual(next(wti), 0.3 * self.rand[0])
++        self.assertAlmostEqual(next(wti), 0.3 * self.rand[0] * self.rand[1])
++        self.assertAlmostEqual(next(wti), 90.1)
++        self.assertRaises(StopIteration, wti.__next__)
+ 
+     def test_low_limit(self):
+         wti = retries.FuzzyExponentialBackoff(0.3, 6.8, 8.5,
+                                               0.0)._wait_time_iter
+-        self.assertAlmostEqual(wti.next(), 0.0)
+-        self.assertRaises(StopIteration, wti.next)
++        self.assertAlmostEqual(next(wti), 0.0)
++        self.assertRaises(StopIteration, wti.__next__)
+ 
+     def test_high_scale(self):
+         wti = retries.FuzzyExponentialBackoff(2.0, 6.8, 8.5,
+                                               3.0)._wait_time_iter
+-        self.assertAlmostEqual(wti.next(), 2.0)
+-        self.assertAlmostEqual(wti.next(), 3.0)
+-        self.assertRaises(StopIteration, wti.next)
++        self.assertAlmostEqual(next(wti), 2.0)
++        self.assertAlmostEqual(next(wti), 3.0)
++        self.assertRaises(StopIteration, wti.__next__)
+ 
+ class TestRandomBackoff(unittest.TestCase):
+     def setUp(self):
+@@ -208,7 +208,7 @@ class TestRandomBackoff(unittest.TestCase):
+     def test_normal(self):
+         wti = retries.RandomBackoff(6.8, 8.5)._wait_time_iter
+         for r in self.rand:
+-            self.assertAlmostEqual(wti.next(), r)
++            self.assertAlmostEqual(next(wti), r)
+ 
+ if __name__ == '__main__':
+     unittest.main()
+diff --git a/bindings/python/test_testutil.py b/bindings/python/test_testutil.py
+index e3643e7d..f43c0c05 100755
+--- a/bindings/python/test_testutil.py
++++ b/bindings/python/test_testutil.py
+@@ -19,12 +19,12 @@
+ See L{testutil}.
+ """
+ 
+-from __future__ import with_statement
++
+ 
+ import unittest
+-import cPickle as pickle
++import pickle as pickle
+ import sys
+-import StringIO
++import io
+ 
+ from testutil import BreakException, Opaque, Counter, MockRetry
+ 
+@@ -36,8 +36,8 @@ class TestOpaque(unittest.TestCase):
+         y = Opaque()
+         self.assertEqual(x, x)
+         self.assertNotEqual(x, y)
+-        self.assert_(x == x)
+-        self.assert_(x != y)
++        self.assertTrue(x == x)
++        self.assertTrue(x != y)
+ 
+     def test_pickle(self):
+         x1 = Opaque()
+@@ -101,14 +101,14 @@ class TestCounter(unittest.TestCase):
+         def f():
+             with Counter(self, 3) as counter:
+                 raise E
+-        s = StringIO.StringIO()
++        s = io.StringIO()
+         saved = sys.stdout
+         try:
+             sys.stdout = s
+             self.assertRaises(E, f)
+         finally:
+             sys.stdout = saved
+-        self.assertEquals(s.getvalue(),
++        self.assertEqual(s.getvalue(),
+                           "Suppressed exception from Counter.__exit__()\n")
+ 
+ class TestMockRetry(unittest.TestCase):
+@@ -116,32 +116,32 @@ class TestMockRetry(unittest.TestCase):
+ 
+     def test_next(self):
+         retries = MockRetry(self)
+-        self.assertEquals(retries.next(), retries)
+-        self.assertRaises(StopIteration, retries.next)
++        self.assertEqual(next(retries), retries)
++        self.assertRaises(StopIteration, retries.__next__)
+         retries.done()
+ 
+     def test_later(self):
+         retries = MockRetry(self, expect_later=True)
+-        retries.next()
++        next(retries)
+         retries.later()
+-        self.assertRaises(BreakException, retries.next)
++        self.assertRaises(BreakException, retries.__next__)
+         retries.done()
+ 
+     def test_later_bad(self):
+         retries = MockRetry(self)
+-        retries.next()
++        next(retries)
+         self.assertRaises(self.failureException, retries.later)
+ 
+     def test_immediate(self):
+         retries = MockRetry(self, expect_immediate=True)
+-        retries.next()
++        next(retries)
+         retries.immediate()
+-        self.assertRaises(BreakException, retries.next)
++        self.assertRaises(BreakException, retries.__next__)
+         retries.done()
+ 
+     def test_immediate_bad(self):
+         retries = MockRetry(self)
+-        retries.next()
++        next(retries)
+         self.assertRaises(self.failureException, retries.immediate)
+ 
+     def test_with(self):
+@@ -161,14 +161,14 @@ class TestMockRetry(unittest.TestCase):
+         def f():
+             with MockRetry(self, expect_later=True) as retries:
+                 raise E
+-        s = StringIO.StringIO()
++        s = io.StringIO()
+         saved = sys.stdout
+         try:
+             sys.stdout = s
+             self.assertRaises(E, f)
+         finally:
+             sys.stdout = saved
+-        self.assertEquals(s.getvalue(),
++        self.assertEqual(s.getvalue(),
+                           "Suppressed exception from MockRetry.__exit__()\n")
+ 
+ if __name__ == '__main__':
+diff --git a/bindings/python/test_txramcloud.py b/bindings/python/test_txramcloud.py
+index 03706175..272d4d24 100755
+--- a/bindings/python/test_txramcloud.py
++++ b/bindings/python/test_txramcloud.py
+@@ -20,10 +20,10 @@
+ 
+ """
+ 
+-from __future__ import with_statement
++
+ 
+ import unittest
+-import cPickle as pickle
++import pickle as pickle
+ import time
+ 
+ from testutil import Counter, Opaque, BreakException, MockRetry
+@@ -168,7 +168,7 @@ class TestTxRAMCloud(unittest.TestCase):
+                     counter.bump()
+                     self.assertEqual(table_id, Opaques.table)
+                     self.assertEqual(key, Opaques.txid)
+-                    self.assert_(type(txramcloud.unserialize(blob)) ==
++                    self.assertTrue(type(txramcloud.unserialize(blob)) ==
+                                  txramcloud.Tombstone)
+                     rr = ramcloud.RejectRules(object_exists=True)
+                     self.assertEqual(reject_rules, rr)
+@@ -213,9 +213,9 @@ class TestTxRAMCloud(unittest.TestCase):
+                     return (txramcloud.serialize(my_mt), Opaques.version)
+             def mock_finish_mt(mt, txid, version):
+                 counter.bump(1)
+-                self.assertEquals(mt, my_mt)
+-                self.assertEquals(txid, Opaques.txid)
+-                self.assertEquals(version, Opaques.version)
++                self.assertEqual(mt, my_mt)
++                self.assertEqual(txid, Opaques.txid)
++                self.assertEqual(version, Opaques.version)
+             with txrc_setup(self, rc=MockRAMCloud()) as txrc:
+                 txrc.tx_table = tx_table_id
+                 txrc._finish_mt = mock_finish_mt
+@@ -231,9 +231,9 @@ class TestTxRAMCloud(unittest.TestCase):
+                     return (st, Opaques.version)
+             def mock_unmask_object(table_id, key, txid):
+                 counter.bump(1)
+-                self.assertEquals(table_id, Opaques.table)
+-                self.assertEquals(key, Opaques.oid)
+-                self.assertEquals(txid, Opaques.txid)
++                self.assertEqual(table_id, Opaques.table)
++                self.assertEqual(key, Opaques.oid)
++                self.assertEqual(txid, Opaques.txid)
+             with txrc_setup(self, rc=MockRAMCloud()) as txrc:
+                 txrc._unmask_object = mock_unmask_object
+                 txrc._clean(Opaques.table, Opaques.oid, Opaques.txid,
+@@ -247,13 +247,13 @@ class TestTxRAMCloud(unittest.TestCase):
+                     raise ramcloud.NoObjectError
+             def mock_write_tombstone(txid):
+                 counter.bump(1)
+-                self.assertEquals(txid, Opaques.txid)
++                self.assertEqual(txid, Opaques.txid)
+                 return Opaques.version
+             def mock_unmask_object(table_id, key, txid):
+                 counter.bump(2)
+-                self.assertEquals(table_id, Opaques.table)
+-                self.assertEquals(key, Opaques.oid)
+-                self.assertEquals(txid, Opaques.txid)
++                self.assertEqual(table_id, Opaques.table)
++                self.assertEqual(key, Opaques.oid)
++                self.assertEqual(txid, Opaques.txid)
+             with txrc_setup(self, rc=MockRAMCloud()) as txrc:
+                 txrc._write_tombstone = mock_write_tombstone
+                 txrc._unmask_object = mock_unmask_object
+@@ -313,10 +313,10 @@ class TestTxRAMCloud(unittest.TestCase):
+                     return (blob, Opaques.version)
+             def mock_clean(table_id, key, txid, timeout):
+                 counter.bump(1)
+-                self.assertEquals(table_id, Opaques.table)
+-                self.assertEquals(key, Opaques.oid)
+-                self.assertEquals(txid, 1)
+-                self.assertEquals(timeout, my_timeout)
++                self.assertEqual(table_id, Opaques.table)
++                self.assertEqual(key, Opaques.oid)
++                self.assertEqual(txid, 1)
++                self.assertEqual(timeout, my_timeout)
+             retries = MockRetry(self, expect_later=True)
+             with txrc_setup(self, rc=MockRAMCloud(), retries=retries) as txrc:
+                 txrc._clean = mock_clean
+@@ -805,16 +805,16 @@ class TestCoordinator(unittest.TestCase):
+                 txrc.read_rr = mock_read_rr
+                 r = txrc._mask_object(Opaques.table, Opaques.oid, 30, now + 10,
+                                       ramcloud.RejectRules())
+-                self.assertEquals(r, Opaques.version)
++                self.assertEqual(r, Opaques.version)
+ 
+     def test_mask_object_object_version(self):
+         txrc = TxRAMCloud(0)
+         def mock_read_rr(table_id, key, reject_rules):
+-            self.assert_(reject_rules.object_doesnt_exist)
+-            self.assert_(reject_rules.object_exists)
+-            self.assert_(reject_rules.version_eq_given)
+-            self.assert_(reject_rules.version_gt_given)
+-            self.assertEquals(reject_rules.given_version, 999)
++            self.assertTrue(reject_rules.object_doesnt_exist)
++            self.assertTrue(reject_rules.object_exists)
++            self.assertTrue(reject_rules.version_eq_given)
++            self.assertTrue(reject_rules.version_gt_given)
++            self.assertEqual(reject_rules.given_version, 999)
+             raise ramcloud.VersionError(999, 1023)
+         txrc.read_rr = mock_read_rr
+         rr = ramcloud.RejectRules(object_doesnt_exist=False,
+@@ -823,9 +823,9 @@ class TestCoordinator(unittest.TestCase):
+         try:
+             txrc._mask_object(Opaques.table, Opaques.oid, Opaques.txid,
+                               Opaques.timeout, rr)
+-        except ramcloud.VersionError, e:
+-            self.assertEquals(e.table, Opaques.table)
+-            self.assertEquals(e.oid, Opaques.oid)
++        except ramcloud.VersionError as e:
++            self.assertEqual(e.table, Opaques.table)
++            self.assertEqual(e.oid, Opaques.oid)
+         else:
+             self.fail()
+ 
+@@ -838,9 +838,9 @@ class TestCoordinator(unittest.TestCase):
+             try:
+                 txrc._mask_object(Opaques.table, Opaques.oid, Opaques.txid,
+                                   Opaques.timeout, rr)
+-            except ramcloud.NoObjectError, e:
+-                self.assertEquals(e.table, Opaques.table)
+-                self.assertEquals(e.oid, Opaques.oid)
++            except ramcloud.NoObjectError as e:
++                self.assertEqual(e.table, Opaques.table)
++                self.assertEqual(e.oid, Opaques.oid)
+             else:
+                 self.fail()
+ 
+@@ -863,7 +863,7 @@ class TestCoordinator(unittest.TestCase):
+                 txrc.read_rr = mock_read_rr
+                 r = txrc._mask_object(Opaques.table, Opaques.oid, 30, now + 10,
+                                       ramcloud.RejectRules())
+-                self.assertEquals(r, Opaques.version)
++                self.assertEqual(r, Opaques.version)
+ 
+     def test_mask_object_unmasked_write_error(self):
+         with Counter(self, 2) as counter:
+@@ -896,7 +896,7 @@ class TestCoordinator(unittest.TestCase):
+         mt = txramcloud.MiniTransaction()
+         txid = Opaques.txid
+         timeout = Opaques.timeout
+-        expected = zip(range(100, 130), range(200, 230), range(300, 330))
++        expected = list(zip(list(range(100, 130)), list(range(200, 230)), list(range(300, 330))))
+         for (table, oid, version) in expected:
+             rr = ramcloud.RejectRules.exactly(version)
+             mt[(table, oid)] = txramcloud.MTOperation(rr)
+@@ -908,28 +908,28 @@ class TestCoordinator(unittest.TestCase):
+         with Counter(self, 30) as counter:
+             def mock_mask_object(table_id, key, txid, timeout, reject_rules):
+                 counter.bump()
+-                self.assertEquals(txid, Opaques.txid)
+-                self.assertEquals(timeout, Opaques.timeout)
+-                self.assertEquals(expected[counter.count],
++                self.assertEqual(txid, Opaques.txid)
++                self.assertEqual(timeout, Opaques.timeout)
++                self.assertEqual(expected[counter.count],
+                                   (table_id, key, reject_rules.given_version))
+                 return expected[counter.count][2] + 1
+             txrc._mask_object = mock_mask_object
+             r = txrc._mask_objects([(t,o) for (t,o,v) in expected],
+                                    mt, txid, timeout)
+             for (t, o, v) in expected:
+-                self.assertEquals(r[(t, o)], v + 1)
++                self.assertEqual(r[(t, o)], v + 1)
+ 
+     def test_mask_objects_err(self):
+         mt, txid, timeout, expected, txrc = self.setup_test_mask_objects()
+         with Counter(self, 12) as counter:
+             def mock_mask_object(table_id, key, txid, timeout, reject_rules):
+-                if counter.bump(range(11)) == 10:
++                if counter.bump(list(range(11))) == 10:
+                     raise BreakException
+             def mock_unmask_objects(objects, txid):
+                 counter.bump(11)
+-                self.assertEquals(set(objects),
++                self.assertEqual(set(objects),
+                                   set([(t,o) for (t,o,v) in expected[:10]]))
+-                self.assertEquals(txid, Opaques.txid)
++                self.assertEqual(txid, Opaques.txid)
+             txrc._mask_object = mock_mask_object
+             txrc._unmask_objects = mock_unmask_objects
+             self.assertRaises(BreakException, txrc._mask_objects,
+@@ -1128,22 +1128,22 @@ class TestCoordinator(unittest.TestCase):
+             def mock_apply_op(table_id, key, txid, op):
+                 counter.bump()
+                 observed.add((table_id, key, op))
+-                self.assertEquals(txid, Opaques.txid)
++                self.assertEqual(txid, Opaques.txid)
+             with txrc_setup(self) as txrc:
+                 txrc._apply_op = mock_apply_op
+                 txrc._apply_mt(mt, Opaques.txid)
+-                self.assertEquals(observed, expected)
++                self.assertEqual(observed, expected)
+ 
+     def test_finish_mt(self):
+         with Counter(self, 2) as counter:
+             def mock_apply_mt(mt, txid):
+                 counter.bump(0)
+-                self.assertEquals(mt, Opaques.mt)
+-                self.assertEquals(txid, Opaques.txid)
++                self.assertEqual(mt, Opaques.mt)
++                self.assertEqual(txid, Opaques.txid)
+             def mock_delete_mt(txid, version):
+                 counter.bump(1)
+-                self.assertEquals(txid, Opaques.txid)
+-                self.assertEquals(version, Opaques.version)
++                self.assertEqual(txid, Opaques.txid)
++                self.assertEqual(version, Opaques.version)
+             with txrc_setup(self) as txrc:
+                 txrc._apply_mt = mock_apply_mt
+                 txrc._delete_mt = mock_delete_mt
+@@ -1172,28 +1172,28 @@ class TestCoordinator(unittest.TestCase):
+         with Counter(self, 3) as counter:
+             def mock_mask_objects(objects, _mt, txid, timeout):
+                 counter.bump(0)
+-                self.assertEquals(objects, [(38, 2), (38, 3), (73, 4)])
+-                self.assertEquals(_mt, mt)
+-                self.assertEquals(txid, 48484)
+-                self.assert_(timeout > time.time() + 5)
+-                self.assert_(timeout < time.time() + 60)
++                self.assertEqual(objects, [(38, 2), (38, 3), (73, 4)])
++                self.assertEqual(_mt, mt)
++                self.assertEqual(txid, 48484)
++                self.assertTrue(timeout > time.time() + 5)
++                self.assertTrue(timeout < time.time() + 60)
+                 return {(38, 2): 11, (38, 3): 21, (73, 4): 31}
+             def mock_write_mt(_mt, txid):
+                 counter.bump(1)
+-                self.assertEquals(_mt, mt)
+-                self.assertEquals(txid, 48484)
++                self.assertEqual(_mt, mt)
++                self.assertEqual(txid, 48484)
+                 return Opaques.version
+             def mock_finish_mt(_mt, txid, version):
+                 counter.bump(2)
+-                self.assertEquals(_mt, mt)
+-                self.assertEquals(txid, 48484)
+-                self.assertEquals(version, Opaques.version)
++                self.assertEqual(_mt, mt)
++                self.assertEqual(txid, 48484)
++                self.assertEqual(version, Opaques.version)
+             with txrc_setup(self) as txrc:
+                 txrc.txid_res = iter([48484])
+                 txrc._mask_objects = mock_mask_objects
+                 txrc._write_mt = mock_write_mt
+                 txrc._finish_mt = mock_finish_mt
+-                self.assertEquals(txrc.mt_commit(mt),
++                self.assertEqual(txrc.mt_commit(mt),
+                                   {(38, 2): 12, (38, 3): 22, (73, 4): None})
+ 
+     def test_mt_commit_mask_fail(self):
+@@ -1210,8 +1210,8 @@ class TestCoordinator(unittest.TestCase):
+                 txrc._mask_objects = mock_mask_objects
+                 try:
+                     txrc.mt_commit(mt)
+-                except txrc.TransactionRejected, e:
+-                    self.assertEquals(e.reasons, {(73, 4): em})
++                except txrc.TransactionRejected as e:
++                    self.assertEqual(e.reasons, {(73, 4): em})
+                 else:
+                     self.fail()
+ 
+@@ -1226,11 +1226,11 @@ class TestCoordinator(unittest.TestCase):
+                 raise BreakException
+             def mock_unmask_objects(objects, txid):
+                 counter.bump(2)
+-                self.assertEquals(set(objects), set(mt.keys()))
+-                self.assertEquals(txid, 48484)
++                self.assertEqual(set(objects), set(mt.keys()))
++                self.assertEqual(txid, 48484)
+             def mock_delete_tombstone(txid):
+                 counter.bump(3)
+-                self.assertEquals(txid, 48484)
++                self.assertEqual(txid, 48484)
+             with txrc_setup(self) as txrc:
+                 txrc.txid_res = iter([48484])
+                 txrc._mask_objects = mock_mask_objects
+@@ -1242,9 +1242,9 @@ class TestCoordinator(unittest.TestCase):
+ class TestMiniTransaction(unittest.TestCase):
+     def assertSerializable(self, mt):
+         mt_out = txramcloud.unserialize(txramcloud.serialize(mt))
+-        self.assertEquals(set(mt_out.keys()), set(mt.keys()))
++        self.assertEqual(set(mt_out.keys()), set(mt.keys()))
+         for key in mt_out:
+-            self.assertEquals(type(mt_out[key]), type(mt[key]))
++            self.assertEqual(type(mt_out[key]), type(mt[key]))
+             # TODO: we'd like to test operation equality, not type equality
+ 
+     def test_mt_serializable(self):
+diff --git a/bindings/python/testutil.py b/bindings/python/testutil.py
+index b040f7af..aec9fffd 100644
+--- a/bindings/python/testutil.py
++++ b/bindings/python/testutil.py
+@@ -76,13 +76,13 @@ class Counter(object):
+ 
+         self.count += 1
+         if self.steps is not None:
+-            self.tc.assert_(self.count + 1 <= self.steps,
++            self.tc.assertTrue(self.count + 1 <= self.steps,
+                             "count=%d, steps=%d" % (self.count, self.steps))
+         if expected is not None:
+             try:
+-                self.tc.assert_(self.count in expected)
++                self.tc.assertTrue(self.count in expected)
+             except TypeError:
+-                self.tc.assertEquals(self.count, expected)
++                self.tc.assertEqual(self.count, expected)
+         return self.count
+ 
+     def done(self):
+@@ -117,7 +117,7 @@ class Counter(object):
+             else:
+                 # If there was already an exception, I'm betting it's more
+                 # interesting.
+-                print "Suppressed exception from Counter.__exit__()"
++                print("Suppressed exception from Counter.__exit__()")
+ 
+ class MockRetry(retries.ImmediateRetry):
+     """A mock implementation of a L{retries.ImmediateRetry}.
+@@ -155,19 +155,19 @@ class MockRetry(retries.ImmediateRetry):
+         retries.ImmediateRetry.__init__(self)
+         return self
+ 
+-    def next(self):
++    def __next__(self):
+         r = retries.ImmediateRetry.next(self)
+         if self.count == 1:
+             raise BreakException
+         return r
+ 
+     def immediate(self):
+-        self.tc.assert_(self.expect_immediate)
++        self.tc.assertTrue(self.expect_immediate)
+         self.expect_immediate = False
+         retries.ImmediateRetry.immediate(self)
+ 
+     def later(self):
+-        self.tc.assert_(self.expect_later)
++        self.tc.assertTrue(self.expect_later)
+         self.expect_later = False
+         retries.ImmediateRetry.later(self)
+ 
+@@ -201,4 +201,4 @@ class MockRetry(retries.ImmediateRetry):
+             else:
+                 # If there was already an exception, I'm betting it's more
+                 # interesting.
+-                print "Suppressed exception from MockRetry.__exit__()"
++                print("Suppressed exception from MockRetry.__exit__()")
+diff --git a/bindings/python/txramcloud.py b/bindings/python/txramcloud.py
+index 2a77de6d..2612f297 100644
+--- a/bindings/python/txramcloud.py
++++ b/bindings/python/txramcloud.py
+@@ -86,7 +86,7 @@ Consequences
+ 
+ import struct
+ import time
+-import cPickle as pickle
++import pickle as pickle
+ 
+ import retries
+ import ramcloud
+@@ -574,12 +574,12 @@ class TxRAMCloud(RAMCloud):
+                             given_version=user_reject_rules.given_version)
+             try:
+                 data, version = self.read_rr(table_id, key, rr_read)
+-            except (ramcloud.ObjectExistsError, ramcloud.VersionError), e:
++            except (ramcloud.ObjectExistsError, ramcloud.VersionError) as e:
+                 # The user asked for a reject
+                 e.table = table_id
+                 e.oid = key
+                 raise
+-            except ramcloud.NoObjectError, e:
++            except ramcloud.NoObjectError as e:
+                 if user_reject_rules.object_doesnt_exist:
+                     # The user asked for a reject
+                     e.table = table_id
+@@ -647,7 +647,7 @@ class TxRAMCloud(RAMCloud):
+                 masked_versions[(table_id, key)] = masked_version
+         except:
+             # the order to _unmask_objects shouldn't matter
+-            self._unmask_objects(masked_versions.keys(), txid)
++            self._unmask_objects(list(masked_versions.keys()), txid)
+             raise
+         return masked_versions
+ 
+@@ -775,7 +775,7 @@ class TxRAMCloud(RAMCloud):
+         @param txid: the transaction ID which masks the objects in the transaction
+         @type  txid: C{int}
+         """
+-        for ((table_id, key), op) in mt.items():
++        for ((table_id, key), op) in list(mt.items()):
+             self._apply_op(table_id, key, txid, op)
+ 
+     def _finish_mt(self, mt, txid, version):
+@@ -820,7 +820,7 @@ class TxRAMCloud(RAMCloud):
+         # reserve a new transaction ID. 0 is not valid.
+         txid = 0
+         while txid == 0:
+-            txid = self.txid_res.next()
++            txid = next(self.txid_res)
+         timeout = time.time() + 30
+ 
+         # mask objects (in sorted order to guarantee no deadlock)
+@@ -828,7 +828,7 @@ class TxRAMCloud(RAMCloud):
+         try:
+             masked_versions = self._mask_objects(objects, mt, txid, timeout)
+         except (ramcloud.NoObjectError, ramcloud.ObjectExistsError,
+-                ramcloud.VersionError), e:
++                ramcloud.VersionError) as e:
+             a = self.TransactionRejected()
+             a.reasons[(e.table, e.oid)] = e
+             raise a
+@@ -852,7 +852,7 @@ class TxRAMCloud(RAMCloud):
+         # Assume unmasked version is 1 greater than masked version,
+         # unless the operation was a delete.
+         unmasked_versions = {}
+-        for ((t, o), v) in masked_versions.items():
++        for ((t, o), v) in list(masked_versions.items()):
+             if type(mt[(t, o)]) == MTDelete:
+                 unmasked_versions[(t, o)] = None
+             else:
+@@ -886,21 +886,21 @@ class MTDelete(MTOperation):
+ def main():
+     global r
+     r = TxRAMCloud(7)
+-    print "Client: 0x%x" % r.client
++    print("Client: 0x%x" % r.client)
+     r.connect()
+     r.ping()
+ 
+     r.create_table("test")
+-    print "Created table 'test'",
++    print("Created table 'test'", end=' ')
+     table = r.get_table_id("test")
+-    print "with id %s" % table
++    print("with id %s" % table)
+ 
+     r.create(table, 0, "Hello, World, from Python")
+-    print "Inserted to table"
++    print("Inserted to table")
+     value, got_version = r.read(table, 0)
+-    print value
++    print(value)
+     key = r.insert(table, "test")
+-    print "Inserted value and got back key %d" % key
++    print("Inserted value and got back key %d" % key)
+     r.update(table, key, "test")
+ 
+     bs = "binary\00safe?"

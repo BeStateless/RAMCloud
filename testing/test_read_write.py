@@ -33,7 +33,7 @@ class TestReadWrite(unittest.TestCase):
                 value = x.rc_client.read(x.table, 'testKey_%d_FOOBARBAZDEADBEEF%d' % (j, i))
                 expect(value).equals(('testValue_%d_FOOBARBAZDEADBEEF%d' % (j, i), (4096*j)+i+2))
             ts2 = time.time()
-            print "That one took:", datetime.datetime.fromtimestamp(ts2-ts1).strftime('%H:%M:%S:%f')
+            print("That one took:", datetime.datetime.fromtimestamp(ts2-ts1).strftime('%H:%M:%S:%f'))
 
 if __name__ == '__main__':
     unittest.main()
