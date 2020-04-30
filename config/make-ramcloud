@@ -53,5 +53,5 @@ mv install/lib/ramcloud/* install/lib && rmdir install/lib/ramcloud
 cd src
 PROTO_OUT=/src/RAMCloud/bindings/python
 for proto_file in $(ls *.proto); do
-  python -m grpc_tools.protoc -I. --python_out=${PROTO_OUT} --grpc_python_out=${PROTO_OUT} ${proto_file}
+  python3 -m grpc_tools.protoc -I. --python_out=${PROTO_OUT} --grpc_python_out=${PROTO_OUT} ${proto_file}
 done

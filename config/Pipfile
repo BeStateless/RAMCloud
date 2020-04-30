@@ -7,12 +7,13 @@ verify_ssl = true
 
 [packages]
 docker = "*"
-pyaml = "*"
-pyexpect = "*"
 grpcio = "*"
 grpcio-tools = "*"
 kazoo = "*"
+pyaml = "*"
+pyexpect = "*"
+pylint = "*"
 timeout-decorator = "*"
 
 [requires]
-python_version = "2.7"
+python_version = "3.7"

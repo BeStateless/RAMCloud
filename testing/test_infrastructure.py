@@ -28,7 +28,7 @@ class TestInfrastructure(unittest.TestCase):
         table_data = zk_client.get('/ramcloud/main/tables/test')[0]
         table_parsed = Table_pb2.Table()
         table_parsed.ParseFromString(table_data)
-        expect(table_parsed.id).equals(1L)
+        expect(table_parsed.id).equals(1)
         expect(table_parsed.name).equals("test")
 
     @timeout(ten_minutes)

@@ -26,7 +26,7 @@ class TestElectedCoordinator(unittest.TestCase):
         # find the host corresponding to the elected coordinator, kill its rc-coordinator!
         # we should still be able to get the testKey.
         zk_client = ctu.get_zookeeper_client(x.ensemble)
-        locator =  zk_client.get('/ramcloud/main/coordinator')[0]
+        locator =  zk_client.get('/ramcloud/main/coordinator')[0].decode()
         host = ctu.get_host(locator)
         x.node_containers[host].exec_run('killall -SIGKILL rc-coordinator')
 
@@ -34,7 +34,7 @@ class TestElectedCoordinator(unittest.TestCase):
         # to see our value.
         value = x.rc_client.read(x.table, 'testKey')
         time.sleep(3)  # 3 seconds is needed for a new coordinator to be elected & results to show in zk
-        new_locator =  zk_client.get('/ramcloud/main/coordinator')[0]
+        new_locator =  zk_client.get('/ramcloud/main/coordinator')[0].decode()
 
         expect(value).equals(('testValue', 1))
         expect(new_locator).not_equals(None)

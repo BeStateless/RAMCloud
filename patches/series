@@ -9,3 +9,4 @@ flaky-test_fix.patch
 async-transaction.patch
 plus_one.patch
 transport-timeout-interval.patch
+bindings-migration.patch
