@@ -41,32 +41,35 @@ script. Once RAMCloud is built with `DEBUG=yes`, the unit tests can be ran with:
 As outlined in the `Known Unit Test Issues` section, there are some known
 issues with the unit tests.
 
-After RAMCloud has been built (via make-ramcloud), a full integration test may
-be run using this command in the dev-env container:
+After RAMCloud has been built (via make-ramcloud), a full standalone test suite
+may be run using this command (shown below) in the dev-env container. The tests
+are called "standalone" since the coordinators and servers are treated as
+standalone products, and interacted with via python test files acting as a
+RAMCloud client.
 
-    ./config/make-ramcloud-integration-test
+    ./config/make-ramcloud-standalone-test
 
 This will build a `ramcloud-test` Docker image from the build artifacts at
-`/src/RAMCloud/install`, then spin up a three-node ZooKeeper ensemble, three
-RAMCloud coordinators, and three RAMCloud servers. Once that infrastructure has
+`/src/RAMCloud/install`, then spin up a three-node ZooKeeper ensemble, 3 or 4
+RAMCloud coordinators, and 3 or 4 RAMCloud servers. Once that infrastructure has
 been spun up, the python RAMCloud client is used to connect to the running
 RAMCloud cluster, create a RAMCloud table, write a value to the table, read that
 value back, and validate that it has the correct value.
 
-Because integration tests run slow. If you only wish to rerun one specific
-integration test (for example, test_zookeeper_read() within the class 
+Because standalone tests run slow. If you only wish to rerun one specific
+standalone test (for example, test_zookeeper_read() within the class 
 TestInfrastructure of file test_infrastructure.py), you can do so this way.
 
-    python -m unittest test_infrastructure.TestInfrastructure.test_zookeeper_read
+    python3 -m unittest test_infrastructure.TestInfrastructure.test_zookeeper_read
 
 In addition, the comments of cluster_test_utils.py provides some suggestions
 to try in the Python interpreter (within the development environment container)
-for debugging if you run into trouble with the integration tests.
+for debugging if you run into trouble with the standalone tests.
 
 To make changes to the RAMCloud code simply make changes to the code in the
 `./RAMCloud` directory on your host machine, and then run
 `./config/make-ramcloud` again on the the development environment bash shell.
-Once RAMCloud is rebuilt, you can run the unit and integration tests again to
+Once RAMCloud is rebuilt, you can run the unit and standalone tests again to
 run the updated code.
 
 # Obtaining the Patched Code
@@ -128,14 +131,14 @@ the command
 
 The command may be run within the dev-env or on your host, it does not matter.
 
-# Modifying Integration Test Packages
+# Modifying Standalone Test Packages
 
 Changes to command-line packages used in the development environment container
 need to be made to config/Dockerfile.dev, and changes to command-line packages
 used in the node containers running RAMCloud or ZooKeeper need to be made to
 config/Dockerfile.node
 
-Changes to the packages used in the Integration Tests (python 2.7) need to be
+Changes to the packages used in the Standalone Tests (python 3.7) need to be
 made to config/Pipfile. Then, within the development environment container,
 do the following:
 
@@ -144,6 +147,27 @@ do the following:
 
 This will modify the config/Pipfile.lock file with the appropriate new packages,
 existing package versions, and modified hash values.
+
+# Known Standalone Test Issues
+
+Standalone tests may exhibit the warning shown below. 
+
+```
+/usr/lib/python3.7/copy.py:291: ResourceWarning: unclosed <socket.socket fd=51, family=AddressFamily.AF_UNIX, type=SocketKind.SOCK_STREAM, proto=0>
+  for key, value in slotstate.items():
+```
+
+Or possibly also this one.
+
+```
+sys:1: ResourceWarning: unclosed <socket.socket fd=50, family=AddressFamily.AF_UNIX, type=SocketKind.SOCK_STREAM, proto=0, raddr=/var/run/docker.sock>
+```
+
+However, per conversation on this link shown here, these aren't something to be
+concerned about.
+
+https://github.com/psf/requests/issues/3912
+
 
 # Known Unit Test Issues
 
