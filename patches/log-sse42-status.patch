@@ -1,0 +1,98 @@
+Reintroduces logging of SSE 4.2 support, but in flag-controlled manner.
+
+From: nobody <nobody@nowhere>
+
+
+---
+ .gitignore          |    2 ++
+ src/Crc32C.cc       |    8 ++++++++
+ src/Crc32C.h        |    6 ++++++
+ src/OptionParser.cc |   12 ++++++++++++
+ 4 files changed, 28 insertions(+)
+
+diff --git a/.gitignore b/.gitignore
+index 4f80bbb8..0f86a172 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -13,6 +13,8 @@
+ 
+ /install/
+ /bindings/java/build/
++/bindings/python/*_pb2.py
++/bindings/python/*_pb2_grpc.py
+ /deps/
+ /logs/
+ /docs/doxygen/
+diff --git a/src/Crc32C.cc b/src/Crc32C.cc
+index 79e6e420..035e98e9 100644
+--- a/src/Crc32C.cc
++++ b/src/Crc32C.cc
+@@ -40,6 +40,14 @@ bool Crc32C::haveHardware = haveSse42();
+ bool Crc32C::haveHardware = false;
+ #endif
+ 
++void Crc32C::logSse42Status() {
++	if (haveHardware) {
++		LOG(DEBUG, "Processor has SSE 4.2");
++	} else {
++		LOG(DEBUG, "Processor does not have SSE 4.2");
++	}
++}
++
+ } // namespace RAMCloud
+ 
+ namespace Crc32CSlicingBy8 {
+diff --git a/src/Crc32C.h b/src/Crc32C.h
+index f8ace60f..ed1780e5 100644
+--- a/src/Crc32C.h
++++ b/src/Crc32C.h
+@@ -248,6 +248,12 @@ class Crc32C {
+         return ~result;
+     }
+ 
++    /**
++     * Logs if we have SSE 4.2 support or not. This is indicated by the
++     * haveHardware variable.
++     */
++    static void logSse42Status();
++
+   PRIVATE:
+     /// Whether this machine has Intel's CRC32C instruction.
+     static bool haveHardware;
+diff --git a/src/OptionParser.cc b/src/OptionParser.cc
+index ac233aac..a4a9be03 100644
+--- a/src/OptionParser.cc
++++ b/src/OptionParser.cc
+@@ -167,6 +167,7 @@ OptionParser::setup(int argc, char* argv[])
+         vector<string> logLevels;
+         string configFile(".ramcloud");
+         bool debugOnSegfault = false;
++        bool shouldLogSse42Status = false;
+ 
+         // Basic options supported on the command line of all apps
+         OptionsDescription commonOptions("Common");
+@@ -236,6 +237,10 @@ OptionParser::setup(int argc, char* argv[])
+                 default_value(0),
+              "How many intervals (attempts) in an rpc session to try with the "
+              "client connection before declaring that session is dead.")
++            ("shouldLogSse42Status",
++             ProgramOptions::bool_switch(&shouldLogSse42Status),
++             "Whether or not we log the status of the processor having "
++             "SSE 4.2")
+             ("dpdkPort",
+              ProgramOptions::value<int>(&options.dpdkPort)->
+                 default_value(-1),
+@@ -341,6 +346,13 @@ OptionParser::setup(int argc, char* argv[])
+             Logger::get().setLogLevel(name, level);
+         }
+ 
++        if (shouldLogSse42Status) {
++            // When enabled, we want to log the status, i.e., if we have
++            // SSE 4.2 support or not. We purposely wait for logging to get
++            // setup first.
++            Crc32C::logSse42Status();
++        }
++
+         if (options.pcapFilePath != "")
+             pcapFile.construct(options.pcapFilePath.c_str(),
+                                PcapFile::LinkType::ETHERNET);
