@@ -10,3 +10,4 @@ async-transaction.patch
 plus_one.patch
 transport-timeout-interval.patch
 bindings-migration.patch
+log-sse42-status.patch

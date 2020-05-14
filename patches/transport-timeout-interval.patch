@@ -1,5 +1,7 @@
 Adds timeoutIntervals argument.
 
+From: nobody <nobody@nowhere>
+
 This controls the variable of same name in BasicTransport.cc
 
 From: Ofer Gill <ofer.gill@stateless.net>
