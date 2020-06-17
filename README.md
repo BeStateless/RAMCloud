@@ -31,6 +31,11 @@ running:
 
 This will place all of the RAMCloud build artifacts at `./RAMCloud/install`.
 
+Less common: If an inner RAMCloud directory was already existing, and you do 
+NOT want to refresh patches from `patches/series` you can do:
+
+    ./config/make-ramcloud --nopatch
+
 (Optional) One other thing you can do within this development environment shell
 is run the unit tests for RAMCloud. Note, in order to do that, you must pass the
 `--debug` option when you compile RAMCloud with the `./config/make-ramcloud`

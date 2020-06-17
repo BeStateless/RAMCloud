@@ -4,6 +4,11 @@
 # Command-line Defaults.
 DEBUG=no
 DEBUG_OPT=no
+PATCH=1
+PATCH_HINT="Unable to refresh inner RAMCloud directory.\
+ Please either use --nopatch, or make sure any current\
+ inner RAMCloud changes are saved in a stg patch,\
+ git commit, or git stash"
 
 # Parse command line.
 while [[ ${#} -gt 0 ]]; do
@@ -14,6 +19,7 @@ while [[ ${#} -gt 0 ]]; do
       echo
       echo "  --debug     -- Enable DEBUG=yes on the build. Required for unit tests."
       echo "  --debug-opt -- Disable optimizations (-O0) on debug builds."
+      echo "  --nopatch   -- Don't patch inner RAMCloud directory"
       exit 0
       ;;
     --debug)
@@ -24,6 +30,10 @@ while [[ ${#} -gt 0 ]]; do
       DEBUG_OPT=yes
       shift 1
       ;;
+    --nopatch)
+      PATCH=0
+      shift 1
+      ;;
     *)
       echo "Unrecognized option: ${KEY}"
       exit 1
@@ -31,10 +41,21 @@ while [[ ${#} -gt 0 ]]; do
   esac
 done
 
-# Get the patched RAMCloud source if it does not already exist.
 set -x
 cd /src
-[[ ! -d RAMCloud ]] && ./config/patch
+if [[ ! -d RAMCloud ]]; then
+  # Get the patched RAMCloud source if it does not already exist.
+  ./config/patch
+elif [[ ${PATCH} -eq 1 ]]; then
+  # Refresh inner RAMCloud with any new patches from patches/series,
+  # but don't remove any existing patches. Show PATCH_HINT if
+  # something went wrong.
+  cd RAMCloud
+  stg import --series -i ../patches/series || { 
+    echo "${PATCH_HINT}"
+    exit 1
+  }
+fi
 cd /src/RAMCloud
 
 # Build RAMCloud.
