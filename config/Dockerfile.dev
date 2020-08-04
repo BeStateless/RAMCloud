@@ -29,8 +29,12 @@ RUN apt-get update \
       software-properties-common \
       stgit \
       vim \
+      # wget is great for troubleshooting zookeeper installations
+      wget \
  && rm -rf /var/lib/apt/lists/* \
- && pip3 install pipenv \
+# Using pipenv for 2018.11.26 due to a known error mentioned here:
+# https://github.com/pypa/pipenv/issues/4220
+ && pip3 install pipenv==2018.11.26 \
  && pipenv install --system \
  && rm Pipfile* \
  && curl -fsSL https://download.docker.com/linux/debian/gpg | apt-key add - \
