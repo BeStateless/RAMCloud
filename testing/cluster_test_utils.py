@@ -115,6 +115,20 @@ def launch_node(cluster_name, hostname, zk_servers, external_storage, zkid, ip, 
 class ClusterTest:
     def setUp(self, num_nodes = 4):
         assert (num_nodes >= 3), ("num_nodes(%s) must be at least 3."%num_nodes)
+
+        # clean out any old docker fixtures
+        docker_containers = docker_client.containers.list(all=True, filters={"name":"ramcloud-node-*"})
+        try:
+            for dc in docker_containers:
+                print("removing container:", dc.name)
+                dc.remove(force=True)
+            docker_network = docker_client.networks.get("ramcloud-net")
+            print("removing network:", docker_network);
+            docker_network.remove()
+        except docker.errors.NotFound as nf:
+            # NotFound is ignored because we're trying to remove the network whether it's there or not
+            pass
+
         self.ramcloud_network = make_docker_network('ramcloud-net', '10.0.0.0/16')
         self.node_image = get_node_image()
         self.rc_client = ramcloud.RAMCloud()
