@@ -77,6 +77,49 @@ To make changes to the RAMCloud code simply make changes to the code in the
 Once RAMCloud is rebuilt, you can run the unit and standalone tests again to
 run the updated code.
 
+# Bringing up your own RAMCloud test cluster
+
+There's a script to simplify bringing up/down/resetting your RAMCloud cluster for you,
+especially if you feel like debugging RAMCloud from python3 interpreter (arguably a
+really nice way to troubleshoot in RAMCloud). It's the file testing/ramcloud_test_cluster.py,
+from within the development environment (it's ./config/dev-env to bring this up, as
+mentioned in previous section). From this dev environment, you can run:
+
+    python3 testing/ramcloud_test_cluster.py
+
+This shows the status of your RAMCloud cluster. (Nifty, aye?) It may say you don't have
+a cluster up or not. You can bring one up or clear out all RAMCloud tables in this
+cluster by doing:
+
+    python3 testing/ramcloud_test_cluster.py -a reset
+
+The nice thing about this command is clearing out all tables without wasting time bringing
+down then up RAMCloud. You can also do this to bring down the cluster when you're done.
+
+    python3 testing/ramcloud_test_cluster.py -a stop
+
+The -a option also supports start and status, in addition to reset and stop. start will
+hard-reset the cluster if it's up already (slower), or in the event there's no cluster up,
+it brings one up. status shows if a cluster is up or not (it's equiv to omitting the -a option)
+
+There's also the -n option, which controls the number of nodes to bring up (each node has
+zk + rc-coordinator + rc-server). When -n is ommitted, it defaults to 3. You should RARELY
+ever need to change this from the default. 3 is arguably the minimum # of nodes needed for
+"good behavior" in zk (due to consensus algorithm with tie-breaker) and rc-server (due to
+needing one instance for master copy, one instance for backup, and one instance for
+"probation" until it is trusted by the other rc-servers and elected rc-coordinator)
+
+In the event you do need to mess with -n (let's say you want it at 4), note that you WILL
+need to hard-reset the cluster (ie doing -a reset will NOT work). Something like this should
+achieve the effect you want:
+
+    python3 testing/ramcloud_test_cluster.py -a start -n 4
+
+After this point, you can continue to soft-reset the cluster, and it keeps the same number of
+nodes. I.e., this command should work at this point:
+
+    python3 testing/ramcloud_test_cluster.py -a reset
+
 # Obtaining the Patched Code
 
 First, install `stgit` through your package manager, e.g. `apt-get install

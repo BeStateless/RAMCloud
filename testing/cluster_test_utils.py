@@ -1,6 +1,7 @@
 import copy
 import docker
 import kazoo.client
+import kazoo.exceptions
 import logging
 import logging.config
 import os
@@ -101,6 +102,52 @@ def launch_node(cluster_name, hostname, zk_servers, external_storage, zkid, ip, 
 
     logger.info('Launching node container %s with IP address %s...successful', hostname, ip)
     return docker_client.containers.get(container_id)
+
+def get_status():
+    docker_containers = docker_client.containers.list(all=True, filters={"name":"ramcloud-node-*"})
+    docker_network = False
+    try:
+        docker_network = docker_client.networks.get("ramcloud-net")
+    except docker.errors.NotFound as nf:
+        pass
+    if not docker_containers:
+        logger.info('No ramcloud nodes found')
+    else:
+        logger.info('Found %s ramcloude nodes', len(docker_containers))
+    if not docker_network:
+        logger.info('ramcloud network not found')
+    else:
+        logger.info('Found ramcloud network')
+    return (docker_network, docker_containers)
+
+def destroy_network_and_containers(docker_network, docker_containers):
+    try:
+        for dc in docker_containers:
+            print("removing container:", dc.name)
+            dc.remove(force=True)
+        if docker_network:
+            print("removing network:", docker_network)
+            docker_network.remove()
+    except docker.errors.NotFound as nf:
+        print("unable to destroy containers and/or network")
+
+def get_ensemble(num_nodes = 3):
+    return {i: '10.0.1.{}'.format(i) for i in range(1, num_nodes + 1)}
+
+def get_table_names(ensemble):
+    try:
+        zkc = get_zookeeper_client(ensemble)
+        return zkc.get_children('/ramcloud/main/tables')
+    except kazoo.exceptions.NoNodeError as nne:
+        # If tables in zk exists but wasn't initialized, then this is thrown, so return an empty list
+        return []
+
+def drop_tables(ensemble, table_names):
+    r = ramcloud.RAMCloud()
+    external_storage = 'zk:' + external_storage_string(ensemble)
+    r.connect(external_storage, 'main')
+    for table_name in table_names:
+        r.drop_table(table_name)
 
 # ClusterTest Usage in Python interpreter:
 # >>> import cluster_test_utils as ctu

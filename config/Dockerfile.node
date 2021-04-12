@@ -49,8 +49,8 @@ ARG DISTRO_NAME=apache-zookeeper-3.5.8-bin
 
 # Download Apache Zookeeper, verify its PGP signature, untar and clean up
 RUN set -eux; \
-    wget -q "https://www.apache.org/dist/zookeeper/$SHORT_DISTRO_NAME/$DISTRO_NAME.tar.gz"; \
-    wget -q "https://www.apache.org/dist/zookeeper/$SHORT_DISTRO_NAME/$DISTRO_NAME.tar.gz.asc"; \
+    wget -q "http://archive.apache.org/dist/zookeeper/$SHORT_DISTRO_NAME/$DISTRO_NAME.tar.gz"; \
+    wget -q "http://archive.apache.org/dist/zookeeper/$SHORT_DISTRO_NAME/$DISTRO_NAME.tar.gz.asc"; \
     export GNUPGHOME="$(mktemp -d)"; \
 # Removing these checks because the GPG_KEY value above is no longer correct for the 3.5.7 ZK package
 #    gpg --keyserver ha.pool.sks-keyservers.net --recv-key "$GPG_KEY" || \
