@@ -12,3 +12,4 @@ transport-timeout-interval.patch
 bindings-migration.patch
 log-sse42-status.patch
 rpcwrapper-logging-fix.patch
+table-enumerator.patch

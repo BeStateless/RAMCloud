@@ -1,0 +1,24 @@
+Adds TableEnumerator and ShortMacros headers to install area of RAMCloud
+
+From: nobody <nobody@nowhere>
+
+
+---
+ GNUmakefile |    2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/GNUmakefile b/GNUmakefile
+index 201131cc..227237b1 100644
+--- a/GNUmakefile
++++ b/GNUmakefile
+@@ -467,8 +467,10 @@ INSTALL_INCLUDES := \
+     src/ServerIdRpcWrapper.h \
+     src/ServerMetrics.h \
+     src/ServiceMask.h \
++    src/ShortMacros.h \
+     src/SpinLock.h \
+     src/Status.h \
++    src/TableEnumerator.h \
+     src/TestLog.h \
+     src/Transaction.h \
+     src/Transport.h \
