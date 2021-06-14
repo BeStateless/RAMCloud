@@ -149,6 +149,75 @@ def drop_tables(ensemble, table_names):
     for table_name in table_names:
         r.drop_table(table_name)
 
+def output_logs_detached(docker_containers, path="/src/tmp"):
+    if not os.path.exists(path):
+        os.makedirs(path)
+    for container in docker_containers:
+        outfile = '%s/%s.out' % (path, container.name)
+        f = open(outfile, 'wb')
+        # make a stream of output logs to iterate and write to file
+        # (uses less memory than storing the container log as a string),
+        # and don't keep the stream open for new logs, since we want
+        # to get thru outputting whatever we got for this container
+        # before doing same for next container.
+        for line in container.logs(stream=True, follow=False):
+            f.write(line)
+        f.close()
+
+def output_zk_detached(ensemble, path="/src/tmp"):
+    if not os.path.exists(path):
+        os.makedirs(path)
+    zk_client = get_zookeeper_client(ensemble)
+    zk_table_configs = [
+        ZkTableConfiguration(
+            outfile = "config.out", 
+            zk_path = "/zookeeper/config", 
+            proto = "string", 
+            is_leaf = True),
+        ZkTableConfiguration(
+            outfile = "quota.out", 
+            zk_path = "/zookeeper/quota", 
+            proto = "string", 
+            is_leaf = True),
+        ZkTableConfiguration(
+            outfile = "coordinatorClusterClock.out", 
+            zk_path = "/ramcloud/main/coordinatorClusterClock", 
+            proto = CoordinatorClusterClock_pb2.CoordinatorClusterClock(), 
+            is_leaf = True),
+        ZkTableConfiguration(
+            outfile = "tables.out", 
+            zk_path = "/ramcloud/main/tables", 
+            proto = Table_pb2.Table(), 
+            is_leaf = False),
+        ZkTableConfiguration(
+            outfile = "tableManager.out", 
+            zk_path = "/ramcloud/main/tableManager", 
+            proto = TableManager_pb2.TableManager(), 
+            is_leaf = True),
+        ZkTableConfiguration(
+            outfile = "coordinator.out", 
+            zk_path = "/ramcloud/main/coordinator", 
+            proto = "string", 
+            is_leaf = True),
+        ZkTableConfiguration(
+            outfile = "servers.out", 
+            zk_path = "/ramcloud/main/servers", 
+            proto = ServerListEntry_pb2.ServerListEntry(), 
+            is_leaf = False),
+        ZkTableConfiguration(
+            outfile = "coordinatorUpdateManager.out", 
+            zk_path = "/ramcloud/main/coordinatorUpdateManager", 
+            proto = CoordinatorUpdateInfo_pb2.CoordinatorUpdateInfo(), 
+            is_leaf = True),
+        ZkTableConfiguration(
+            outfile = "clientLeaseAuthority.out", 
+            zk_path = "/ramcloud/main/clientLeaseAuthority", 
+            proto = "string", 
+            is_leaf = False),
+    ]
+    for zk_table_config in zk_table_configs:
+        zk_table_config.dump(path, zk_client)
+
 # ClusterTest Usage in Python interpreter:
 # >>> import cluster_test_utils as ctu
 # >>> x = ctu.ClusterTest()

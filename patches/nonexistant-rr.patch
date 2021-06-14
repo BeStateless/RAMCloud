@@ -1,0 +1,22 @@
+Forced nonexistant key to ban reject-rules specifying versionLE or versionNE
+
+From: nobody <nobody@nowhere>
+
+
+---
+ src/ObjectManager.cc |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/ObjectManager.cc b/src/ObjectManager.cc
+index 9c2d3b0c..5f4a6e79 100644
+--- a/src/ObjectManager.cc
++++ b/src/ObjectManager.cc
+@@ -2893,7 +2893,7 @@ Status
+ ObjectManager::rejectOperation(const RejectRules* rejectRules, uint64_t version)
+ {
+     if (version == VERSION_NONEXISTENT) {
+-        if (rejectRules->doesntExist)
++        if (rejectRules->doesntExist || rejectRules->versionLeGiven || rejectRules->versionNeGiven)
+             return STATUS_OBJECT_DOESNT_EXIST;
+         return STATUS_OK;
+     }
