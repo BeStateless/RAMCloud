@@ -55,6 +55,10 @@ def ensemble_servers_string(ensemble):
     return ' '.join(['server.{}={}:2888:3888;2181'.format(zkid, ip) for (zkid, ip) in list(ensemble.items())])
 
 def get_node_image():
+    existing_images = docker_client.images.list(name="ramcloud-test")
+    if (len(existing_images) > 0):
+        logger.info('Found existing ramcloud-test image, using that...')
+        return existing_images[0]
     logger.info('Building ramcloud-test-node image...')
     node_image = docker_client.images.build(path='/src',
                                             dockerfile='/src/config/Dockerfile.node',
