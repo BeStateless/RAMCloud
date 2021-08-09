@@ -37,6 +37,41 @@ docker_api = docker.APIClient(base_url='unix://var/run/docker.sock')
 
 ten_minutes = 600  # number of seconds in 10 minutes
 
+cluster_cidr = "169.254.3.0/24"
+cluster_ip_prefix = "169.254.3"
+cluster_notation = 24
+
+docker_image_name = "ramcloud-test"
+docker_network_name = "ramcloud-net"
+docker_node_prefix = "ramcloud-node"
+
+def set_cluster_cidr(val):
+    # We are changing these global variables in this method!
+    global cluster_cidr, cluster_ip_prefix, cluster_notation
+    cluster_cidr=val
+    cn = cluster_cidr.split('/')
+    if (len(cn) < 2):
+        logger.error("Missing required '/' in cidr, provided: {}".format(cluster_cidr))
+        exit(1)
+    cluster_notation = int(cn[1])
+    if (cluster_notation != 16 and cluster_notation != 24):
+        logger.error("Only cidr notation of /16 or /24 is supported at the moment, provided: {}".format(cluster_cidr))
+        exit(1)
+    ip_parts = cn[0].split('.')
+    if (len(ip_parts) < 4):
+        logger.error("IPv4 format with 4 numbers expected, provided: {}".format(cluster_cidr))
+        exit(1)
+    cluster_ip_prefix = '.'.join(ip_parts[0:3])
+
+def set_docker_names(val):
+    # We are changing these global variables in this method!
+    global docker_image_name, docker_network_name, docker_node_prefix
+    names = val.split(',')
+    if (len(names) < 3):
+        logger.error("Three names required, provided: {}".format(val))
+        exit(1)
+    (docker_image_name, docker_network_name, docker_node_prefix) = names[0:3]
+
 def get_zookeeper_client(ensemble, read_only=True):
     client = kazoo.client.KazooClient(hosts=external_storage_string(ensemble), read_only=read_only)
     client.start()
@@ -55,20 +90,27 @@ def ensemble_servers_string(ensemble):
     return ' '.join(['server.{}={}:2888:3888;2181'.format(zkid, ip) for (zkid, ip) in list(ensemble.items())])
 
 def get_node_image():
-    existing_images = docker_client.images.list(name="ramcloud-test")
+    existing_images = docker_client.images.list(name=docker_image_name)
     if (len(existing_images) > 0):
-        logger.info('Found existing ramcloud-test image, using that...')
+        logger.info('Found existing {} image, using that...'.format(docker_image_name))
         return existing_images[0]
-    logger.info('Building ramcloud-test-node image...')
+    logger.info('Building {} image...'.format(docker_image_name))
     node_image = docker_client.images.build(path='/src',
                                             dockerfile='/src/config/Dockerfile.node',
-                                            tag='ramcloud-test')[0]
-    logger.info('Building ramcloud-test-node image...succeeded')
+                                            tag=docker_image_name)[0]
+    logger.info('Building {} image...succeeded'.format(docker_image_name))
     return node_image
 
 def make_docker_network(name, subnet):
     logger.info('Creating docker network %s on subnet %s...', name, subnet)
-    ramcloud_net_pool = docker.types.IPAMPool(subnet=subnet)
+    # When cluster_notation is 16, gateway is None (auto-determined), and when cluster_notation is 24,
+    # then the gateway should be a.b.c.254, with a.b.c dictated by cluster_ip_prefix
+    # NOTE: There are probably other valid cluster_notation values that work with docker.types.IPAMPool,
+    # but this requires a bit of careful time and experimentation to find out.
+    gateway=None
+    if (cluster_notation == 24):
+        gateway="{}.254".format(cluster_ip_prefix)
+    ramcloud_net_pool = docker.types.IPAMPool(subnet=subnet, gateway=gateway)
     ramcloud_net_config = docker.types.IPAMConfig(pool_configs=[ramcloud_net_pool])
     network = docker_client.networks.create(name, ipam=ramcloud_net_config, check_duplicate=True)
     logger.info('Creating docker network %s on subnet %s...succeeded', name, subnet)
@@ -108,10 +150,10 @@ def launch_node(cluster_name, hostname, zk_servers, external_storage, zkid, ip, 
     return docker_client.containers.get(container_id)
 
 def get_status():
-    docker_containers = docker_client.containers.list(all=True, filters={"name":"ramcloud-node-*"})
+    docker_containers = docker_client.containers.list(all=True, filters={"name":"{}-*".format(docker_node_prefix)})
     docker_network = False
     try:
-        docker_network = docker_client.networks.get("ramcloud-net")
+        docker_network = docker_client.networks.get(docker_network_name)
     except docker.errors.NotFound as nf:
         pass
     if not docker_containers:
@@ -136,7 +178,9 @@ def destroy_network_and_containers(docker_network, docker_containers):
         print("unable to destroy containers and/or network")
 
 def get_ensemble(num_nodes = 3):
-    return {i: '10.0.1.{}'.format(i) for i in range(1, num_nodes + 1)}
+    # NOTE: There is probably a more flexible way to support ip's for the nodes,
+    # but the manner shown here works when cluster_notation is 16 or 24
+    return {i: '{}.{}'.format(cluster_ip_prefix, i) for i in range(1, num_nodes + 1)}
 
 def get_table_names(ensemble):
     try:
@@ -237,27 +281,27 @@ class ClusterTest:
         assert (num_nodes >= 3), ("num_nodes(%s) must be at least 3."%num_nodes)
 
         # clean out any old docker fixtures
-        docker_containers = docker_client.containers.list(all=True, filters={"name":"ramcloud-node-*"})
+        docker_containers = docker_client.containers.list(all=True, filters={"name":"{}-*".format(docker_node_prefix)})
         try:
             for dc in docker_containers:
                 print("removing container:", dc.name)
                 dc.remove(force=True)
-            docker_network = docker_client.networks.get("ramcloud-net")
+            docker_network = docker_client.networks.get(docker_network_name)
             print("removing network:", docker_network);
             docker_network.remove()
         except docker.errors.NotFound as nf:
             # NotFound is ignored because we're trying to remove the network whether it's there or not
             pass
 
-        self.ramcloud_network = make_docker_network('ramcloud-net', '10.0.0.0/16')
+        self.ramcloud_network = make_docker_network(docker_network_name, cluster_cidr)
         self.node_image = get_node_image()
         self.rc_client = ramcloud.RAMCloud()
         self.node_containers = {}
-        self.ensemble = {i: '10.0.1.{}'.format(i) for i in range(1, num_nodes + 1)}
+        self.ensemble = {i: '{}.{}'.format(cluster_ip_prefix, i) for i in range(1, num_nodes + 1)}
         zk_servers = ensemble_servers_string(self.ensemble)
         external_storage = 'zk:' + external_storage_string(self.ensemble)
         for i in range(1, num_nodes + 1):
-            hostname = 'ramcloud-node-{}'.format(i)
+            hostname = '{}-{}'.format(docker_node_prefix, i)
             self.node_containers[self.ensemble[i]] = launch_node('main',
                                                                  hostname,
                                                                  zk_servers,
