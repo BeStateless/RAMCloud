@@ -14,3 +14,4 @@ log-sse42-status.patch
 rpcwrapper-logging-fix.patch
 table-enumerator.patch
 nonexistant-rr.patch
+multiop-rr-fix.patch

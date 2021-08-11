@@ -87,6 +87,7 @@ RUN apt-get update \
       libssl1.1 \
       libzookeeper-mt2 \
       procps \
+      psmisc \
       supervisor \
  && rm -rf /var/lib/apt/lists/*
 COPY ./RAMCloud/install /usr/local
