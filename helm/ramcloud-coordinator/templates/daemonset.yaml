@@ -1,0 +1,89 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "ramcloudCoordinator.fullname" . }}
+  labels:
+    {{- include "ramcloudCoordinator.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "ramcloudCoordinator.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "ramcloudCoordinator.selectorLabels" . | nindent 8 }}
+    spec:
+      tolerations:
+      - key: node-role.kubernetes.io/master
+        operator: Exists
+        effect: NoSchedule
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "ramcloudCoordinator.serviceAccountName" . }}
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      containers:
+      - name: {{ .Chart.Name }}
+        securityContext:
+          {{- toYaml .Values.securityContext | nindent 12 }}
+        image: {{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}
+        resources:
+          limits:
+            memory: "2000Mi"
+            cpu: "1"
+          requests:
+            memory: "2000Mi"
+            cpu: "1"
+        command: ["/usr/local/bin/rc-coordinator" ]
+        args: [
+          "--externalStorage",
+          "zk:{{ .Release.Name }}-zookeeper:2181",
+          "--clusterName", "main",
+          "--coordinator",
+          "basic+{{ .Values.transport.mode }}:host=$(TRANSPORT_IP),port={{ .Values.transport.port }}",
+          "--maxCores",
+          "{{ .Values.maxCores }}"
+        ]
+        env:
+          - name: TRANSPORT_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.hostIP
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        livenessProbe:
+          exec:
+            command:
+            - bash
+            - /opt/health.sh
+          initialDelaySeconds: 300
+          periodSeconds: 60
+          timeoutSeconds: 20
+          failureThreshold: 3
+        volumeMounts:
+        - name: root-devices
+          mountPath: /dev
+        - name: pci-drivers
+          mountPath: /sys/bus/pci/drivers
+        - name: hugepages
+          mountPath: /sys/kernel/mm/hugepages
+        - name: node-device
+          mountPath: /sys/devices/system/node
+      volumes:
+      - name: root-devices
+        hostPath:
+          path: /dev
+      - name: pci-drivers
+        hostPath:
+          path: /sys/bus/pci/drivers
+      - name: hugepages
+        hostPath:
+          path: /sys/kernel/mm/hugepages
+      - name: node-device
+        hostPath:
+          path: /sys/devices/system/node

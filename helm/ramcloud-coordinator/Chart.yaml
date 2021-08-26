@@ -1,0 +1,15 @@
+apiVersion: v2
+name: ramcloud-coordinator
+description: Ramcloud Coordinator
+type: application
+version: 0.2.0
+appVersion: 0.2.0
+dependencies:
+# TODO remove this and add stuff to separate zk orchestrator dependency and add in appropriate stuffs
+# TODO to point them all at the same zookeeper service
+#  - name: zookeeper
+#    repository: https://charts.bitnami.com/bitnami
+#    version: 13.0.2
+#  - name: orchestrator
+#    repository: https://gitlab.stateless/orchestrator
+#    version: 0.2.0
