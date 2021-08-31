@@ -77,11 +77,11 @@ def get_zookeeper_client(ensemble, read_only=True):
     client.start()
     return client
 
-def get_host(locator):
+def get_host(locator, transport='basic+udp'):
     # locator should be in format 'k1=v1,k2=v2,....,kn=vn'
     args = [x for x in locator.split(',') if x.find('=') >= 0]
     arg_map = {k : v for (k,v) in [a.split('=', 2) for a in args]}
-    return arg_map['basic+udp:host']
+    return arg_map[transport+':host']
 
 def external_storage_string(ensemble):
     return ','.join(['{}:2181'.format(ip) for (_, ip) in list(ensemble.items())])
@@ -277,7 +277,7 @@ def output_zk_detached(ensemble, path="/src/tmp"):
 # < Check output files in /src/tmp >
 # >>> x.tearDown()
 class ClusterTest:
-    def setUp(self, num_nodes = 4):
+    def setUp(self, num_nodes = 4, transport='basic+udp'):
         assert (num_nodes >= 3), ("num_nodes(%s) must be at least 3."%num_nodes)
 
         # clean out any old docker fixtures
@@ -293,6 +293,7 @@ class ClusterTest:
             # NotFound is ignored because we're trying to remove the network whether it's there or not
             pass
 
+        self.transport = transport
         self.ramcloud_network = make_docker_network(docker_network_name, cluster_cidr)
         self.node_image = get_node_image()
         self.rc_client = ramcloud.RAMCloud()
@@ -320,8 +321,8 @@ class ClusterTest:
                 proto = ServerListEntry_pb2.ServerListEntry(), 
                 is_leaf = False)
         server_protos = zk_config.getTable(zk_client)
-        self.server_id_to_host = {s.server_id : get_host(s.service_locator) for s in server_protos}
-        self.host_to_server_id = {get_host(s.service_locator) : s.server_id for s in server_protos}
+        self.server_id_to_host = {s.server_id : get_host(s.service_locator, self.transport) for s in server_protos}
+        self.host_to_server_id = {get_host(s.service_locator, self.transport) : s.server_id for s in server_protos}
         zk_client.stop()
 
     # This method assumes we're running rc-server with the usePlusOneBackup flag set to true.

@@ -1,5 +1,6 @@
 import cluster_test_utils as ctu
 import argparse
+import test_exhaustive_calls
 import sys
 
 # If you're trying to make fake data in RAMCloud, this works from Python3 interpreter,
@@ -32,6 +33,9 @@ if __name__ == '__main__':
                              "NETWORK is the name of the docker network to create (not an IP address), "
                              "and NODE is the prefix to use for the names of the docker containers corresponding to the nodes, and "
                              "appears as NODE-1, NODE-2, NODE-3, etc.")
+    parser.add_argument('--transport', '-t', type=str, default="basic+udp",
+                        help="The transport type to use when looking up rc-server and rc-coordinator instances. "
+                             "Use infrc instead of udp if you want RoCEv2. ")
 
 args = parser.parse_args()
 
@@ -47,7 +51,7 @@ print("docker_names = {},{},{}".format(ctu.docker_image_name, ctu.docker_network
 
 if (args.action == "start"):
     x = ctu.ClusterTest()
-    x.setUp(num_nodes = args.nodes)
+    x.setUp(num_nodes = args.nodes, transport=args.transport)
 elif (args.action == "status"):
     ctu.get_status()
 elif (args.action == "stop"):
@@ -67,14 +71,14 @@ elif (args.action == "reset"):
         # No network (or containers), means bring up new cluster
         print("Bringing up new cluster with ", args.nodes, " nodes")
         x = ctu.ClusterTest()
-        x.setUp(num_nodes = args.nodes)
+        x.setUp(num_nodes = args.nodes, transport=args.transport)
     elif (not docker_containers):
         # A network but no containers means no data, so take it down, & bring back up
         print("Inconsistent State")
         print("Bringing up new cluster with ", args.nodes, " nodes")
         ctu.destroy_network_and_containers(docker_network, [])
         x = ctu.ClusterTest()
-        x.setUp(num_nodes = args.nodes)
+        x.setUp(num_nodes = args.nodes, transport=args.transport)
     else:
         # We have a network and containers. Get the ensemble, table names, then drop all tables!
         print("Found a cluster with ", len(docker_containers), " nodes")
@@ -84,5 +88,7 @@ elif (args.action == "reset"):
         print("Table names = ", table_names)
         print("Dropping all tables")
         ctu.drop_tables(ensemble, table_names)
+elif (args.action == 'rq'):
+    test_exhaustive_calls.run_queries()
 else:
     parser.print_help()
