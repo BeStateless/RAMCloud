@@ -1,5 +1,11 @@
 # RAMCloud
 
+**THIS REPO IS DEPRECATED!!!**
+
+If you are looking for the current RAMCloud repo maintained by Stateless, which is used by the Stateless Software Router version 4.0 & later, it is [here](https://gitlab.com/stateless/ramcloud). 
+
+## Older Instructions
+
 This is the Stateless fork of RAMCloud. Instead of maintaining a normal git fork
 we use [stgit](http://www.procode.org/stgit/) to maintain a patchset. This
 simplifies things by keeping the upstream history entirely outside of our repo
